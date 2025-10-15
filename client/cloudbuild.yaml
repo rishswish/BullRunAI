@@ -12,6 +12,8 @@ steps:
       - client/Dockerfile
       - '--build-arg'
       - VITE_APP_API_URL=${_VITE_APP_API_URL}
+      - '--build-arg'
+      - VITE_APP_GOOGLE_CLIENT_ID=${_VITE_APP_GOOGLE_CLIENT_ID}
 
   # Push the container image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
@@ -37,5 +39,4 @@ images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br_client:latest'
 
 options:
-
   logging: CLOUD_LOGGING_ONLY
