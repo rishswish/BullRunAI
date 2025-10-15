@@ -1,0 +1,37 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Build the container image'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br_server:latest'
+      - server
+      - '-f'
+      - server/Dockerfile
+
+  # Push the container image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'Push the container image'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br_server:latest'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'Deploy to Cloud Run'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE_NAME}
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/br/br_server:latest
+      - --region=us-central1
+      - --platform=managed
+      - --service-account=br-deploy@br-prod-475122.iam.gserviceaccount.com
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br_server:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

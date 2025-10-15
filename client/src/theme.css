@@ -1,0 +1,60 @@
+/* Playground/BR/client/src/theme.css */
+:root {
+    color-scheme: light;
+  }
+  
+  .theme-dark {
+    color-scheme: dark;
+    background-color: #1a1d29;
+  }
+  
+  /* Card and surface backgrounds - softer, not pure black */
+  .theme-dark .bg-white { background-color: #242837 !important; }
+  .theme-dark .bg-gray-50 { background-color: #1a1d29 !important; }
+  .theme-dark .bg-gray-100 { background-color: #2a2d3a !important; }
+  
+  /* Borders - subtle but visible */
+  .theme-dark .border-gray-100 { border-color: #2f3241 !important; }
+  .theme-dark .border-gray-200 { border-color: #3a3d4f !important; }
+  
+  /* Text colors - better contrast and readability */
+  .theme-dark .text-gray-900 { color: #f1f3f5 !important; }
+  .theme-dark .text-gray-800 { color: #e9ecef !important; }
+  .theme-dark .text-gray-700 { color: #d0d5dd !important; }
+  .theme-dark .text-gray-600 { color: #a6adc8 !important; }
+  .theme-dark .text-gray-500 { color: #8891b0 !important; }
+  .theme-dark .text-gray-400 { color: #6c7a9b !important; }
+  
+  /* Form inputs - better visibility */
+  .theme-dark input[type="text"],
+  .theme-dark input[type="search"],
+  .theme-dark select,
+  .theme-dark textarea {
+    background-color: #2a2d3a !important;
+    color: #f1f3f5 !important;
+    border-color: #3a3d4f !important;
+  }
+  
+  /* Placeholders */
+  .theme-dark ::placeholder {
+    color: #6c7a9b !important;
+  }
+  
+  /* Hover states - smooth transitions */
+  .theme-dark .hover\:bg-gray-50:hover { background-color: #2a2d3a !important; }
+  .theme-dark .hover\:bg-gray-100:hover { background-color: #2f3241 !important; }
+  
+  /* Green accents remain vibrant in dark mode */
+  .theme-dark .bg-green-50 { background-color: #1a3a2e !important; }
+  .theme-dark .text-green-600 { color: #4ade80 !important; }
+  .theme-dark .text-green-700 { color: #22c55e !important; }
+  
+  /* Red accents */
+  .theme-dark .bg-red-50 { background-color: #3a1a1a !important; }
+  .theme-dark .text-red-600 { color: #f87171 !important; }
+  .theme-dark .text-red-700 { color: #ef4444 !important; }
+  
+  /* Blue accents */
+  .theme-dark .bg-blue-50 { background-color: #1a2a3a !important; }
+  .theme-dark .text-blue-600 { color: #60a5fa !important; }
+  .theme-dark .text-blue-700 { color: #3b82f6 !important; }
