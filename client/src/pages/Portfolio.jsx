@@ -248,8 +248,8 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
   return (
     <div className="w-full h-full overflow-auto bg-gray-50">
       <div className=" px-6 py-6 max-w-5xl mx-auto">
-      {/* Top Action Buttons */}
-        <div className="flex items-center justify-end gap-3 mb-4">
+        {/* Top Action Buttons */}
+        <div className="flex w-full items-center justify-start md:justify-end flex-row md:flex-row gap-3 mb-4">
           {/* <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
             <Plus className="w-3.5 h-3.5" />
             Manual Entry
@@ -396,7 +396,7 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                         </button>
                       ))}
                     </div>
-                      <button
+                    <button
                       disabled={isGenerating}
                       onClick={() => requestConnectUrl('')}
                       className="w-full px-3 py-2 text-xs border border-gray-200 rounded-md hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
@@ -446,7 +446,7 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
           </div>
         )}
 
-          {/* Top Stats Cards with mini charts */}
+        {/* Top Stats Cards with mini charts */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
           {/* Net Worth */}
           <div className="bg-white rounded-md p-4 shadow-sm border border-gray-200">
@@ -459,7 +459,7 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                   <h3 className="text-md font-semibold text-gray-900">Net Worth</h3>
                 </div>
                 <p className="text-xs text-gray-500 mb-2">Cash + Investments</p>
-                
+
                 <p className="text-2xl font-bold text-green-600">{formatCurrency(netWorth)}</p>
               </div>
             </div>
@@ -525,31 +525,31 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
               </div>
             ) : (
               <>
-              <div className="h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={balancesData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" interval={0} angle={-35} textAnchor="end" height={50} tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip formatter={(v) => formatCurrency(v)} />
-                    <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              {/* Balances breakdown legend */}
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
-                {balancesData.slice(0, 10).map((row, idx) => (
-                  <div key={`bal-legend-${idx}`} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                      <span className="text-gray-900 font-medium truncate max-w-[180px]">{row.name}</span>
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={balancesData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" interval={0} angle={-35} textAnchor="end" height={50} tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip formatter={(v) => formatCurrency(v)} />
+                      <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Balances breakdown legend */}
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
+                  {balancesData.slice(0, 10).map((row, idx) => (
+                    <div key={`bal-legend-${idx}`} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                        <span className="text-gray-900 font-medium truncate max-w-[180px]">{row.name}</span>
+                      </div>
+                      <div className="text-right text-gray-600">
+                        {formatCurrency(row.value)}
+                      </div>
                     </div>
-                    <div className="text-right text-gray-600">
-                      {formatCurrency(row.value)}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
               </>
             )}
           </div>
@@ -580,7 +580,7 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={(topHoldings || []).map((h, idx) => ({ name: h.symbol || h.name || `H${idx+1}`, value: Number(h.marketValue || 0) }))}
+                        data={(topHoldings || []).map((h, idx) => ({ name: h.symbol || h.name || `H${idx + 1}`, value: Number(h.marketValue || 0) }))}
                         dataKey="value"
                         nameKey="name"
                         innerRadius={55}
@@ -631,89 +631,89 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
             </button>
           </div>
 
-          {demoMode ? 
-          (
-            (transactionsFiltered.length === 0) ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mb-3">
-                  <RefreshCw className="w-6 h-6 text-green-600" />
+          {demoMode ?
+            (
+              (transactionsFiltered.length === 0) ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mb-3">
+                    <RefreshCw className="w-6 h-6 text-green-600" />
+                  </div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-1">No recent demo transactions</h4>
+                  <p className="text-xs text-gray-500">They will appear here when available</p>
                 </div>
-                <h4 className="text-sm font-semibold text-gray-900 mb-1">No recent demo transactions</h4>
-                <p className="text-xs text-gray-500">They will appear here when available</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-xs">
-                  <thead>
-                    <tr className="text-left text-gray-500 border-b border-gray-100">
-                      <th className="py-2 pr-4">Date</th>
-                      <th className="py-2 pr-4">Account</th>
-                      <th className="py-2 pr-4">Symbol</th>
-                      <th className="py-2 pr-4">Action</th>
-                      <th className="py-2 pr-4 text-right">Quantity</th>
-                      <th className="py-2 pr-0 text-right">Price</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transactionsFiltered.slice(0, 10).map((t) => {
-                      const acct = (p.accounts || []).find(a => a.id === t.accountId);
-                      return (
-                        <tr key={t.id} className="border-b border-gray-50">
-                          <td className="py-2 pr-4 text-gray-700">{t.date}</td>
-                          <td className="py-2 pr-4 text-gray-700">{t.date}</td>
-                          <td className="py-2 pr-4 text-gray-700">{acct?.institution || 'Account'}</td>
-                          <td className="py-2 pr-4 text-gray-900 font-medium">{t.symbol}</td>
-                          <td className={`py-2 pr-4 font-semibold ${t.action === 'BUY' ? 'text-green-600' : 'text-red-600'}`}>{t.action}</td>
-                          <td className="py-2 pr-4 text-right text-gray-700">{Number(t.quantity ?? 0).toLocaleString('en-US', { maximumFractionDigits: 9 })}</td>
-                          <td className="py-2 pr-0 text-right text-gray-700">{formatCurrency(t.price)}</td>                          
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )
-          ) : (ordersFiltered.length === 0) ? 
-          (
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mb-3">
-                <RefreshCw className="w-6 h-6 text-green-600" />
-              </div>
-              <h4 className="text-sm font-semibold text-gray-900 mb-1">No recent orders</h4>
-              <p className="text-xs text-gray-500">Orders will appear here as you trade</p>
-            </div>
-          ) : 
-          (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs">
-                <thead>
-                  <tr className="text-left text-gray-500 border-b border-gray-100">
-                    <th className="py-2 pr-4">Placed/Updated</th>
-                    <th className="py-2 pr-4">Account</th>
-                    <th className="py-2 pr-4">Symbol</th>
-                    <th className="py-2 pr-4">Action</th>
-                    <th className="py-2 pr-4 text-right">Qty</th>
-                    <th className="py-2 pr-0 text-right">Type</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ordersFiltered.slice(0, 10).map((o) => {
-                    const acct = (p.accounts || []).find(a => a.id === o.accountId);
-                    return (
-                      <tr key={o.brokerageOrderId} className="border-b border-gray-50">
-                        <td className="py-2 pr-4 text-gray-700">{o.timeUpdated || o.timePlaced || ''}</td>
-                        <td className="py-2 pr-4 text-gray-700">{acct?.institution || 'Account'}</td>
-                        <td className="py-2 pr-4 text-gray-900 font-medium">{o.symbol}</td>
-                        <td className={`py-2 pr-4 font-semibold ${String(o.action).toUpperCase() === 'BUY' ? 'text-green-600' : 'text-red-600'}`}>{o.action}</td>
-                        <td className="py-2 pr-4 text-right text-gray-700">{Number(o.filledQuantity ?? o.totalQuantity ?? 0).toLocaleString('en-US', { maximumFractionDigits: 9 })}</td>
-                        <td className="py-2 pr-0 text-right text-gray-700">{o.orderType || ''}</td>                        
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-gray-500 border-b border-gray-100">
+                        <th className="py-2 pr-4">Date</th>
+                        <th className="py-2 pr-4">Account</th>
+                        <th className="py-2 pr-4">Symbol</th>
+                        <th className="py-2 pr-4">Action</th>
+                        <th className="py-2 pr-4 text-right">Quantity</th>
+                        <th className="py-2 pr-0 text-right">Price</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                    </thead>
+                    <tbody>
+                      {transactionsFiltered.slice(0, 10).map((t) => {
+                        const acct = (p.accounts || []).find(a => a.id === t.accountId);
+                        return (
+                          <tr key={t.id} className="border-b border-gray-50">
+                            <td className="py-2 pr-4 text-gray-700">{t.date}</td>
+                            <td className="py-2 pr-4 text-gray-700">{t.date}</td>
+                            <td className="py-2 pr-4 text-gray-700">{acct?.institution || 'Account'}</td>
+                            <td className="py-2 pr-4 text-gray-900 font-medium">{t.symbol}</td>
+                            <td className={`py-2 pr-4 font-semibold ${t.action === 'BUY' ? 'text-green-600' : 'text-red-600'}`}>{t.action}</td>
+                            <td className="py-2 pr-4 text-right text-gray-700">{Number(t.quantity ?? 0).toLocaleString('en-US', { maximumFractionDigits: 9 })}</td>
+                            <td className="py-2 pr-0 text-right text-gray-700">{formatCurrency(t.price)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : (ordersFiltered.length === 0) ?
+              (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mb-3">
+                    <RefreshCw className="w-6 h-6 text-green-600" />
+                  </div>
+                  <h4 className="text-sm font-semibold text-gray-900 mb-1">No recent orders</h4>
+                  <p className="text-xs text-gray-500">Orders will appear here as you trade</p>
+                </div>
+              ) :
+              (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-gray-500 border-b border-gray-100">
+                        <th className="py-2 pr-4">Placed/Updated</th>
+                        <th className="py-2 pr-4">Account</th>
+                        <th className="py-2 pr-4">Symbol</th>
+                        <th className="py-2 pr-4">Action</th>
+                        <th className="py-2 pr-4 text-right">Qty</th>
+                        <th className="py-2 pr-0 text-right">Type</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ordersFiltered.slice(0, 10).map((o) => {
+                        const acct = (p.accounts || []).find(a => a.id === o.accountId);
+                        return (
+                          <tr key={o.brokerageOrderId} className="border-b border-gray-50">
+                            <td className="py-2 pr-4 text-gray-700">{o.timeUpdated || o.timePlaced || ''}</td>
+                            <td className="py-2 pr-4 text-gray-700">{acct?.institution || 'Account'}</td>
+                            <td className="py-2 pr-4 text-gray-900 font-medium">{o.symbol}</td>
+                            <td className={`py-2 pr-4 font-semibold ${String(o.action).toUpperCase() === 'BUY' ? 'text-green-600' : 'text-red-600'}`}>{o.action}</td>
+                            <td className="py-2 pr-4 text-right text-gray-700">{Number(o.filledQuantity ?? o.totalQuantity ?? 0).toLocaleString('en-US', { maximumFractionDigits: 9 })}</td>
+                            <td className="py-2 pr-0 text-right text-gray-700">{o.orderType || ''}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
         </div>
 
         {/* Top Holdings */}
@@ -796,9 +796,9 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
         {/* Disclaimer */}
         <div className="mt-6 px-3 py-3 text-[10px] text-gray-500 leading-relaxed">
           <p>
-            BullRun, Inc. ("BullRun") is in the process of applying for registration as an investment adviser with the U.S. Securities and Exchange Commission. 
-            Until registration is effective BullRun does not provide investment advisory services to the public and is not soliciting clients in any jurisdiction 
-            where such solicitation or provision of services would be unlawful prior to registration or notice filing. All information on this site is for 
+            BullRun, Inc. ("BullRun") is in the process of applying for registration as an investment adviser with the U.S. Securities and Exchange Commission.
+            Until registration is effective BullRun does not provide investment advisory services to the public and is not soliciting clients in any jurisdiction
+            where such solicitation or provision of services would be unlawful prior to registration or notice filing. All information on this site is for
             informational purposes only and should not be construed as investment advice, an offer, or a solicitation to buy or sell any security.
           </p>
         </div>

@@ -2,7 +2,7 @@ import React from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import brLogo from '../assets/br.png';
 
-function Login({ onLoginSuccess = () => {} }) {
+function Login({ onLoginSuccess = () => { } }) {
   const VITE_APP_API_URL = import.meta.env.VITE_APP_API_URL;
   // Existing Google handler
   const handleGoogleSuccess = ({ credential }) => {
@@ -13,7 +13,7 @@ function Login({ onLoginSuccess = () => {} }) {
     let payload = {};
     try {
       payload = JSON.parse(atob(credential.split('.')[1]));
-    } catch {}
+    } catch { }
     onLoginSuccess({
       email: payload.email,
       name: payload.name,
@@ -167,8 +167,8 @@ function Login({ onLoginSuccess = () => {} }) {
     if (step === 3) return validEmail(email);
     return true;
   }, [step, answers, email]);
-  
-  const goBack = () => setStep(s => Math.max(s - 1, 1));
+
+  const goBack = () => setStep(s => Math.max(s - 1, 0));
 
   const resetAll = () => {
     setStep(0);
@@ -185,8 +185,8 @@ function Login({ onLoginSuccess = () => {} }) {
   };
 
   // Build a logo URL for any ticker; used as fallback if s.logo is missing
-const getLogoUrl = (ticker = '') =>
-  `https://raw.githubusercontent.com/davidepalazzo/ticker-logos/refs/heads/main/ticker_icons/${encodeURIComponent(ticker.trim().toUpperCase())}.png`;
+  const getLogoUrl = (ticker = '') =>
+    `https://raw.githubusercontent.com/davidepalazzo/ticker-logos/refs/heads/main/ticker_icons/${encodeURIComponent(ticker.trim().toUpperCase())}.png`;
 
 
   const handleContinue = async () => {
@@ -229,59 +229,24 @@ const getLogoUrl = (ticker = '') =>
 
   return (
     <div className="min-h-[100dvh] w-full overflow-y-auto flex flex-col bg-white">
-      <nav className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex items-center justify-between sticky top-0 z-50">
-        <button
-          type="button"
-          onClick={resetAll}
-          className="flex items-center gap-2 cursor-pointer"
-        >
-          {brLogo ? (
-            <img src={brLogo} alt="BullRun Logo" className="w-6 h-6" />
-          ) : (
-            <span className="text-gray-900 font-semibold text-sm">BR</span>
-          )}
-          <span className="font-semibold text-gray-900 text-base">BullRun</span>
-        </button>
-  
-        {(step === 4 && viaNavSignIn) ? (
-          <button
-            type="button"
-            onClick={resetAll}
-            className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-md hover:bg-green-700 cursor-pointer"
-          >
-            Back to home
-          </button>
-        ) : (
-          (step < 4) ? (
-            <button
-              type="button"
-              onClick={() => { setViaNavSignIn(true); setStep(4); }}
-              className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-md hover:bg-green-700 cursor-pointer"
-            >
-              Sign in
-            </button>
-          ) : <div />
-        )}
-      </nav>
-  
       <main className={`flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 md:px-8 py-8 ${step === 0 ? 'mt-20' : ''}`}>
         {step === 0 ? (
           <section className="w-full">
             <div className="mx-auto flex items-center justify-center gap-2 mb-4">
               {brLogo ? (
-                <img src={brLogo} alt="BR" className="h-7 w-7 object-contain" />
+                <img src={brLogo} alt="BR" className="h-8 w-8 object-contain" />
               ) : (
                 <span className="text-gray-900 font-bold">BR</span>
               )}
-              <span className="sr-only">BullRun</span>
+              <span className="font-sans text-2xl md:text-4xl font-bold text-gray-900 tracking-tight">BullRun</span>
             </div>
-  
+
             <div className="flex flex-col items-center text-center">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
                 AI-Powered Investment Intelligence
               </div>
-              <h1 className="mt-4 font-sans text-2xl md:text-4xl font-semibold text-gray-900 tracking-tight">
+              <h1 className="mt-10 font-sans text-2xl md:text-4xl font-semibold text-gray-900 tracking-tight">
                 Let&apos;s Transform Your Investing Journey
               </h1>
               <p className="mt-3 text-base md:text-lg text-gray-600 max-w-3xl">
@@ -289,8 +254,16 @@ const getLogoUrl = (ticker = '') =>
                 investment experience that helps you make smarter decisions with confidence.
               </p>
             </div>
-   
-            <div className="mt-10 flex justify-center">
+
+            <div className="mt-10 flex justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => { setViaNavSignIn(true); setStep(4); }}
+                className="px-3 py-1.5 bg-green-600 text-white text-sm font-semibold rounded-md hover:bg-green-700 cursor-pointer inline-flex items-center gap-2"
+              >
+                Sign in <span aria-hidden="true">→</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setStep(1)}
@@ -318,7 +291,7 @@ const getLogoUrl = (ticker = '') =>
             </div>
           </>
         )}
-  
+
         <div className="w-full">
           {(step >= 1 && !(step === 4 && viaNavSignIn)) && (
             <div className="mb-8">
@@ -344,7 +317,7 @@ const getLogoUrl = (ticker = '') =>
               </div>
             </div>
           )}
-  
+
           {/* Step content (unchanged) */}
           {step === 1 && (
             <div className="space-y-6">
@@ -370,7 +343,7 @@ const getLogoUrl = (ticker = '') =>
                   ))}
                 </div>
               </div>
-  
+
               <div className="space-y-3">
                 <label className="block text-xs font-medium text-gray-700">What's your main goal?</label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -395,7 +368,7 @@ const getLogoUrl = (ticker = '') =>
               </div>
             </div>
           )}
-  
+
           {step === 2 && (
             <div className="space-y-4">
               <label className="block text-xs font-medium text-gray-700">
@@ -420,12 +393,12 @@ const getLogoUrl = (ticker = '') =>
               </div>
             </div>
           )}
-  
+
           {step === 3 && (
             <div className="space-y-6">
               <div className="space-y-3">
                 <label className="block text-xs font-medium text-gray-700">Want us to track any specific stocks or assets for you?</label>
-  
+
                 <div className="relative">
                   <input
                     type="text"
@@ -440,7 +413,7 @@ const getLogoUrl = (ticker = '') =>
                   {!!suggestions.length && (
                     <ul className="absolute z-50 mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg overflow-auto max-h-48">
                       {suggestions.map((s, idx) => (
-                          <li key={s.ticker}>
+                        <li key={s.ticker}>
                           <button
                             type="button"
                             onMouseEnter={() => setActiveIdx(idx)}
@@ -466,11 +439,11 @@ const getLogoUrl = (ticker = '') =>
                             </div>
                           </button>
                         </li>
-                                            ))}
+                      ))}
                     </ul>
                   )}
                 </div>
-  
+
                 {!!answers.watchlist.length && (
                   <div className="flex flex-wrap gap-2">
                     {answers.watchlist.map(t => (
@@ -482,7 +455,7 @@ const getLogoUrl = (ticker = '') =>
                   </div>
                 )}
               </div>
-  
+
               {/* Email capture */}
               <div className="space-y-2">
                 <label className="block text-xs font-medium text-gray-700">Your email</label>
@@ -497,7 +470,7 @@ const getLogoUrl = (ticker = '') =>
               </div>
             </div>
           )}
-  
+
           {step === 4 && (
             <div className="space-y-4 text-center">
               {!!registerMessage && (
@@ -511,18 +484,18 @@ const getLogoUrl = (ticker = '') =>
               </div>
             </div>
           )}
-  
-          {(step >= 1 && !(step === 4 && viaNavSignIn)) && (
+
+          {(step >= 1) && (
             <div className="flex items-center justify-between pt-8">
               <button
                 type="button"
                 onClick={goBack}
-                disabled={step === 1}
+                disabled={step === 0}
                 className="px-3 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60 cursor-pointer"
               >
                 Back
               </button>
-  
+
               {step < 4 ? (
                 <button
                   type="button"

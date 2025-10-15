@@ -5,7 +5,7 @@ import Loading from '../components/Loading';
 import { Building, ChartLine } from 'lucide-react';
 import ComparisonChart from '../components/ComparisonChart';
 
-function Ticker({ user }) {
+function Ticker({ user, isMobile }) {
   const { ticker } = useParams();
   const VITE_APP_API_URL = import.meta.env.VITE_APP_API_URL;
   const sym = (ticker || '').toUpperCase();
@@ -118,6 +118,7 @@ function Ticker({ user }) {
           prevClose={data.prevClose}
           change={chg}
           changePct={chgPct}
+          isMobile={isMobile}
         />
 
         {/* Two cards */}

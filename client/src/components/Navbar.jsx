@@ -138,27 +138,32 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
     }
   };
 
+  const selectSuggestion = (s) => {
+    console.log('selectSuggestion called with:', s); // Debug log
+    setQuery('');
+    setShowSuggestions(false);
+    setSearchFocused(false);
+    setMobileSearchOpen(false);
+    setMobileNavOpen(false);
+    
+    // Clear suggestions immediately
+    setSuggestions([]);
+    setActiveIndex(-1);
+    
+    // Navigate to the ticker page
+    const tickerPath = `/dashboard/${encodeURIComponent(s.ticker)}`;
+    console.log('Navigating to:', tickerPath); // Debug log
+    navigate(tickerPath);
+  };
+
   const onBlur = () => {
     // Delay to allow click events on suggestions
     setTimeout(() => {
       setSearchFocused(false);
       setShowSuggestions(false);
       setTimeout(() => setSuggestions([]), 200);
-    }, 200);
+    }, 200); // Keep the delay to allow click events
   };
-
-  const selectSuggestion = (s) => {
-    setQuery('');
-    setShowSuggestions(false);
-    setTimeout(() => {
-      setSuggestions([]);
-      setActiveIndex(-1);
-    }, 200);
-    setMobileSearchOpen(false);
-    setMobileNavOpen(false);
-    navigate(`/dashboard/${encodeURIComponent(s.ticker)}`);
-  };
-
   const onKeyDown = (e) => {
     if (!suggestions.length) return;
     if (e.key === 'ArrowDown') {
@@ -286,13 +291,25 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
                   className={`transition-all duration-150 ${showSuggestions ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}
                   style={{ transitionDelay: showSuggestions ? `${idx * 30}ms` : '0ms' }}
                 >
-                  <button
-                    type="button"
-                    onMouseEnter={() => setActiveIndex(idx)}
-                    onClick={() => selectSuggestion(s)}
-                    className={`w-full px-3 py-2 text-left flex items-center gap-2 transition-colors ${idx === activeIndex ? 'bg-gray-50' : 'bg-white'} hover:bg-gray-50 cursor-pointer`}
-                  >
-                    {/* Logo with black background */}
+<button
+  type="button"
+  onMouseEnter={() => setActiveIndex(idx)}
+  onMouseDown={(e) => {
+    e.preventDefault(); // prevents input blur
+    e.stopPropagation();
+    selectSuggestion(s);
+  }}
+  onTouchStart={(e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    selectSuggestion(s);
+  }}
+  className={`w-full px-3 py-2 text-left flex items-center gap-2 transition-colors ${
+    idx === activeIndex ? 'bg-gray-50' : 'bg-white'
+  } hover:bg-gray-50 cursor-pointer`}
+>
+
+                                                            {/* Logo with black background */}
                     <div className="w-8 h-8 bg-black rounded flex items-center justify-center flex-shrink-0">
                       {s.logo ? (
                         <img
@@ -347,15 +364,9 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
           title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
           ref={themeRef}
         >
-          <div className="relative w-4 h-4">
-            {/* Sun icon */}
-            <Sun
-              className={`w-4 h-4 absolute inset-0 transition-all duration-500 ${theme === 'light'
-                ? 'opacity-100 rotate-0 scale-100'
-                : 'opacity-0 rotate-180 scale-50'
-                }`}
-            />
-            {/* Moon icon */}
+          
+          {/* <div className="relative w-4 h-4">
+            <Sun className={`w-4 h-4 absolute inset-0 transition-all duration-500 ${theme === 'light' ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 rotate-180 scale-50' }`} />
             <svg
               className={`w-4 h-4 absolute inset-0 transition-all duration-500 ${theme === 'dark'
                 ? 'opacity-100 rotate-0 scale-100'
@@ -372,7 +383,7 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
                 d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
               />
             </svg>
-          </div>
+          </div> */}
           {/* Ripple effect on click */}
           <span className="absolute inset-0 bg-green-400 opacity-0 group-active:opacity-20 transition-opacity duration-200 rounded-md" />
         </button>
@@ -476,45 +487,59 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
 
       {/* Mobile search panel */}
       {mobileSearchOpen && (
-        <div className="absolute left-0 right-0 top-full md:hidden bg-white border-b border-gray-200 px-4 py-2 z-50">
-          <div className="max-w-md mx-auto">
-            <div className="relative border border-gray-200 rounded-md cursor-pointer" ref={searchRef}>
-              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search stocks..."
-                value={query}
-                onChange={onInputChange}
-                onKeyDown={onKeyDown}
-                onFocus={onFocus}
-                onBlur={onBlur}
-                aria-autocomplete="list"
-                aria-expanded={suggestions.length > 0}
-                aria-activedescendant={activeIndex >= 0 ? `srch-opt-${activeIndex}` : undefined}
-                className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-md cursor-pointer focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-transparent"
-              />
-              {query ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuery('');
-                    setShowSuggestions(false);
-                    setTimeout(() => {
-                      setSuggestions([]);
-                      setActiveIndex(-1);
-                    }, 200);
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded cursor-pointer"
-                  aria-label="Clear search"
-                  title="Clear"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              ) : null}
+        <div className="fixed left-0 right-0 top-12 md:hidden bg-white z-40 border-b border-gray-200 shadow-lg">
+          <div className="px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 relative" ref={searchRef}>
+                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search stocks..."
+                  value={query}
+                  onChange={onInputChange}
+                  onKeyDown={onKeyDown}
+                  onFocus={onFocus}
+                  onBlur={onBlur}
+                  aria-autocomplete="list"
+                  aria-expanded={suggestions.length > 0}
+                  aria-activedescendant={activeIndex >= 0 ? `srch-opt-${activeIndex}` : undefined}
+                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-md cursor-pointer focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-transparent"
+                  autoFocus
+                />
+                {query ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery('');
+                      setShowSuggestions(false);
+                      setTimeout(() => {
+                        setSuggestions([]);
+                        setActiveIndex(-1);
+                      }, 200);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded cursor-pointer"
+                    aria-label="Clear search"
+                    title="Clear"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileSearchOpen(false)}
+                className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md cursor-pointer"
+                aria-label="Close search"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-              {suggestions.length > 0 && (
+            {/* Suggestions dropdown */}
+            {suggestions.length > 0 && (
+              <div className="mt-2">
                 <ul
-                  className={`absolute z-50 mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden transition-all duration-200 origin-top ${showSuggestions
+                  className={`bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden transition-all duration-200 origin-top ${showSuggestions
                     ? 'opacity-100 scale-y-100 translate-y-0'
                     : 'opacity-0 scale-y-95 -translate-y-2 pointer-events-none'
                     }`}
@@ -556,48 +581,86 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
                     </li>
                   ))}
                 </ul>
-              )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile nav panel - Side drawer with clean animations */}
+      {mobileNavOpen && (
+        <div className="fixed left-0 top-0 bottom-0 md:hidden bg-white z-40 w-80 max-w-[85vw] shadow-2xl border-r border-gray-200 animate-slide-in-right">
+          <div className="flex flex-col h-full">
+            {/* Header with close button */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center gap-1.5">
+                <div className="w-5 h-5 rounded flex items-center justify-center">
+                  <img src={bullrunLogo} alt="BullRun Logo" className="w-5 h-5" />
+                </div>
+                <span className="font-bold text-gray-900 text-base">BullRun</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(false)}
+                className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md cursor-pointer transition-colors"
+                aria-label="Close menu"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Navigation Links */}
+            <div className="flex-1 px-4 py-6 space-y-2">
+              <Link
+                to="/dashboard"
+                onClick={() => setMobileNavOpen(false)}
+                className={`flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-md transition-colors ${location.pathname === '/dashboard'
+                  ? 'text-green-700 bg-green-50'
+                  : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                Market
+              </Link>
+              <Link
+                to="/portfolio"
+                onClick={() => setMobileNavOpen(false)}
+                className={`flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-md transition-colors ${location.pathname === '/portfolio'
+                  ? 'text-green-700 bg-green-50'
+                  : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2 2H5a2 2 0 00-2 2z" />
+                </svg>
+                Portfolio
+              </Link>
+            </div>
+
+            {/* Pro button at bottom */}
+            <div className="p-4 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowProModal(true);
+                  setMobileNavOpen(false);
+                }}
+                className="w-full px-4 py-3 text-sm font-semibold rounded-md bg-gradient-to-r from-green-600 to-green-700 text-white cursor-pointer hover:from-green-700 hover:to-green-800 transition-colors"
+              >
+                Pro
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Mobile nav panel */}
+      {/* Backdrop overlay - transparent with shadow */}
       {mobileNavOpen && (
-        <div className="absolute left-0 right-0 top-full md:hidden bg-white border-b border-gray-200 shadow z-40">
-          <div className="px-4 py-2 space-y-1">
-            <Link
-              to="/dashboard"
-              onClick={() => setMobileNavOpen(false)}
-              className={`block px-3 py-2 text-sm font-medium rounded-md ${location.pathname === '/dashboard'
-                ? 'text-green-700 bg-green-50'
-                : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-            >
-              Market
-            </Link>
-            <Link
-              to="/portfolio"
-              onClick={() => setMobileNavOpen(false)}
-              className={`block px-3 py-2 text-sm font-medium rounded-md ${location.pathname === '/portfolio'
-                ? 'text-green-700 bg-green-50'
-                : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-            >
-              Portfolio
-            </Link>
-            {/* Add Pro button to mobile menu */}
-            <button
-              onClick={() => {
-                setShowProModal(true);
-                setMobileNavOpen(false);
-              }}
-              className="w-full text-left px-3 py-2 text-sm font-medium rounded-md bg-gradient-to-r from-green-600 to-green-700 text-white cursor-pointer"
-            >
-              Pro
-            </button>
-          </div>
-        </div>
+        <div 
+          className="fixed inset-0 bg-transparent z-30 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+        />
       )}
     </nav>
   );

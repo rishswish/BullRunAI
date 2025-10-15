@@ -36,7 +36,8 @@ function buildSmoothPathXY(points) {
   return d;
 }
 
-export default function ComparisonChart({ ticker, symbol, token, benchmarks = [], price, prevClose, change, changePct, logo }) {
+export default function ComparisonChart({ ticker, symbol, token, benchmarks = [], price, prevClose, change, changePct, logo, isMobile }) {
+  console.log('isMobile', isMobile);
   const [tf, setTf] = useState('1D');
   const [visibleBenches, setVisibleBenches] = useState({ sp500: true, nasdaq: true, dow: true });
   const queryClient = useQueryClient();
@@ -48,34 +49,60 @@ export default function ComparisonChart({ ticker, symbol, token, benchmarks = []
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-
+  
     const compute = () => {
-      const width = Math.max(320, Math.floor(el.clientWidth || 0));
-      const isMobile = width < 640;
-      const isTablet = width >= 640 && width < 1024;
-
-      // Keep mobile good, reduce desktop height significantly
-      let height;
-      if (isMobile) {
-        height = Math.round(Math.max(240, Math.min(420, width * 0.6)));
-      } else if (isTablet) {
-        height = Math.round(Math.max(260, Math.min(440, width * 0.36)));
-      } else {
-        height = Math.round(Math.max(260, Math.min(380, width * 0.30)));
-      }
-      setChartSize({ w: width, h: height });
+      const rect = el.getBoundingClientRect();
+      // Remove the hardcoded 320px minimum for mobile
+      const width = isMobile 
+        ? Math.max(280, Math.floor(rect.width || 0))  // Lower minimum for mobile
+        : Math.max(320, Math.floor(rect.width || 0)); // Keep 320px for desktop
+      
+      setChartSize(prev => {
+        if (Math.abs(prev.w - width) < 5) return prev;
+        
+        const isTablet = !isMobile && width < 1024;
+  
+        let height;
+        if (isMobile) {
+          height = Math.round(Math.max(240, Math.min(420, width * 0.6)));
+        } else if (isTablet) {
+          height = Math.round(Math.max(260, Math.min(440, width * 0.36)));
+        } else {
+          height = Math.round(Math.max(260, Math.min(380, width * 0.30)));
+        }
+        return { w: width, h: height };
+      });
     };
-
+    
+    // Initial computation with delays
     compute();
+    const timeout1 = setTimeout(compute, 50);
+    const timeout2 = setTimeout(compute, 200);
+    
     const ro = new ResizeObserver(compute);
     ro.observe(el);
+    
+    window.addEventListener('resize', compute);
     window.addEventListener('orientationchange', compute);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('orientationchange', compute);
+    
+    // Force recomputation when tab becomes visible (fixes tab switching issue)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        setTimeout(compute, 100);
+      }
     };
-  }, []);
-
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearTimeout(timeout1);
+      clearTimeout(timeout2);
+      ro.disconnect();
+      window.removeEventListener('resize', compute);
+      window.removeEventListener('orientationchange', compute);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isMobile]);
+  
   const buildBenchmarksParam = useCallback(() => {
     if (!benchmarks || !benchmarks.length) return '';
     return benchmarks.map(b => `${b.symbol}:${b.key}:${b.label}`).join(',');
@@ -173,11 +200,11 @@ export default function ComparisonChart({ ticker, symbol, token, benchmarks = []
   }, [baseSeries, allBenchmarks, benchPctByKey]);
 
   // Responsive canvas
-  const w = Math.max(320, chartSize.w || 800);
-  const h = Math.max(220, chartSize.h || 360);
-
+  const w = chartSize.w || (isMobile ? 320 : 800);
+  const h = chartSize.h || (isMobile ? 240 : 360);
+  
   // Dynamic paddings based on width
-  const narrow = w < 640;
+  const narrow = isMobile;
   const leftPad = narrow ? 42 : 56;
   const rightPad = narrow ? 34 : 56;
   const topPad = narrow ? 16 : 26;
@@ -477,7 +504,7 @@ export default function ComparisonChart({ ticker, symbol, token, benchmarks = []
 
       {/* Timeframe buttons below name */}
       <div className="px-6 pt-4 pb-2">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar:hidden">
           {TF_ORDER.map(k => {
             const isActive = tf === k;
             const isHeavy = HEAVY_TFS.has(k);
@@ -488,7 +515,7 @@ export default function ComparisonChart({ ticker, symbol, token, benchmarks = []
                 type="button"
                 onClick={() => handleSelectTf(k)}
                 disabled={isLoading}
-                className={`px-2.5 md:px-3 py-1.5 text-[11px] md:text-xs rounded-md border ${
+                className={`px-2 md:px-3 py-1.5 text-[10px] md:text-xs rounded-md border ${
                   isActive
                     ? 'bg-gray-900 text-white border-gray-900 cursor-pointer'
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50 cursor-pointer disabled:opacity-50'
@@ -563,7 +590,6 @@ export default function ComparisonChart({ ticker, symbol, token, benchmarks = []
 
               {/* Tooltip box - smart positioning to avoid covering cursor */}
               {(() => {
-                const isMobile = w < 640;
                 const tooltipWidth = isMobile 
                   ? Math.min(280, Math.max(200, Math.floor(innerW * 0.55)))
                   : Math.min(240, Math.max(180, Math.floor(innerW * 0.25)));

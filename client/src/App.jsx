@@ -16,7 +16,13 @@ const VITE_APP_GOOGLE_CLIENT_ID = import.meta.env.VITE_APP_GOOGLE_CLIENT_ID;
 const VITE_APP_API_URL = import.meta.env.VITE_APP_API_URL;
 
 function AppContent({ user, profile, checkingProfile, updateProfile, handleLogout, theme, setTheme }) {
-  const [isChatbotOpen, setIsChatbotOpen] = useState(true);
+  const isMobile = () => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 768px)').matches
+      || /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  };
+
+  const [isChatbotOpen, setIsChatbotOpen] = useState(() => !isMobile());
   const location = useLocation();
   const isOnboarding = location.pathname === '/onboarding';
 
@@ -52,7 +58,12 @@ function AppContent({ user, profile, checkingProfile, updateProfile, handleLogou
                 checkingProfile
                   ? <Loading message="Loading your dashboard..." />
                   : (profile && profile.hasUserOnboarded
-                    ? <Dashboard isChatbotOpen={isChatbotOpen} setIsChatbotOpen={setIsChatbotOpen} user={user} />
+                    ? <Dashboard 
+                    isChatbotOpen={isChatbotOpen} 
+                    setIsChatbotOpen={setIsChatbotOpen}
+                    user={user}
+                    isMobile={isMobile()}
+                    />
                     : <Navigate to="/onboarding" replace />)
               }
             />
@@ -62,7 +73,7 @@ function AppContent({ user, profile, checkingProfile, updateProfile, handleLogou
                 checkingProfile
                   ? <Loading message="Loading ticker..." />
                   : (profile && profile.hasUserOnboarded
-                    ? <Ticker user={user} />
+                    ? <Ticker user={user} isMobile={isMobile()} />
                     : <Navigate to="/onboarding" replace />)
               }
             />

@@ -6,7 +6,8 @@ import { useNavigate } from 'react-router-dom';
 import ComparisonChart from '../components/ComparisonChart';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-function Dashboard({ isChatbotOpen, setIsChatbotOpen, user }) {
+function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
+  console.log('isMobile', isMobile);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const VITE_APP_API_URL = import.meta.env.VITE_APP_API_URL;
@@ -342,9 +343,6 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user }) {
         {/* Main Article - Keep as is */}
         <div className="bg-white rounded-md p-4 mb-3 shadow-sm border border-gray-200">
           <div className="flex items-start gap-2.5 mb-2">
-            <div className="p-1.5 bg-green-50 rounded flex-shrink-0">
-              <TrendingUp className="w-3.5 h-3.5 text-green-600" />
-            </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-md font-bold text-gray-900 mb-0.5 leading-tight">
                 {marketData.mainArticle.title}
@@ -353,7 +351,7 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user }) {
             </div>
           </div>
           <p className="text-sm text-gray-700 leading-relaxed">
-            {highlightNumbers(marketData.mainArticle.content)}
+            {marketData.mainArticle.content}
           </p>
         </div>
 
@@ -369,6 +367,7 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user }) {
             prevClose={marketData?.marketChart?.prevClose}
             change={marketData?.marketChart?.change}
             changePct={marketData?.marketChart?.changePct}
+            isMobile={isMobile}
           />
         </div>
 
