@@ -2,6 +2,6 @@ flask
 flask-cors
 google-auth
 google-cloud-firestore
-google-oauth2-tool
 requests
 snaptrade-python-sdk
+gunicorn
