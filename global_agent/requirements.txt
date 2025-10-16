@@ -1,0 +1,12 @@
+google-cloud-bigquery
+google-cloud-core
+google-cloud-run
+python-dotenv
+pandas
+google-cloud-secret-manager
+tabulate
+pyarrow
+pandas_gbq
+google-cloud-firestore
+google-auth
+google-genai
