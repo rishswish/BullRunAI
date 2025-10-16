@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Wallet, TrendingUp, BarChart2, PieChart as PieIcon, RefreshCw, Trophy, Building2, Plus, Eye, EyeOff } from 'lucide-react';
+// Update the import statement at the top (line 3)
+import { Wallet, TrendingUp, BarChart2, PieChart as PieIcon, RefreshCw, Trophy, Building2, Plus, Eye, EyeOff, X, Landmark } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import Loading from '../components/Loading';
 
@@ -183,6 +184,45 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
       setLoginUrl('');
     }
   };
+
+  // Add this state variable after line 73
+  const [showConnectModal, setShowConnectModal] = useState(false);
+
+  // Add this useEffect after the existing useEffect (around line 210)
+  useEffect(() => {
+    // Check if we've already shown the connect modal to this user
+    const hasSeenConnectModal = localStorage.getItem('hasSeenConnectModal');
+
+    // Show connect modal if:
+    // 1. User has no connected accounts
+    // 2. Not in demo mode
+    // 3. Haven't shown the modal before
+    // 4. Modal isn't already open
+    if (portfolio &&
+      !portfolio.hasConnectedAccounts &&
+      !demoMode &&
+      !hasSeenConnectModal &&
+      !showConnectModal) {
+      setShowConnectModal(true);
+    }
+  }, [portfolio, demoMode, showConnectModal]);
+
+  // Add this function to handle connecting from the modal
+  const handleConnectFromModal = () => {
+    setShowConnectModal(false);
+    // Mark that user has seen the modal
+    localStorage.setItem('hasSeenConnectModal', 'true');
+    // Open the connect modal
+    openConnectModal();
+  };
+
+
+  const handleConnectModalClose = () => {
+    setShowConnectModal(false);
+    // Mark that user has seen the modal
+    localStorage.setItem('hasSeenConnectModal', 'true');
+  };
+
 
   useEffect(() => {
     if (portfolio) {
@@ -792,6 +832,72 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
             </div>
           )}
         </div>
+
+        {showConnectModal && (
+          <div className="fixed inset-0 bg-transparent flex items-center justify-center z-[1000]" onClick={handleConnectModalClose}>
+            <div className="bg-white rounded-lg shadow-2xl border border-gray-200 p-8 max-w-md w-full mx-4 relative animate-[modalSlideIn_0.3s_ease-out]" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={handleConnectModalClose}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="text-center">
+                {/* Portfolio Icon */}
+                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                  <Landmark className="w-8 h-8 text-green-600" />
+                </div>
+
+                <h2 className="text-xl font-bold text-gray-900 mb-2">Connect Your Portfolio</h2>
+                <p className="text-gray-600 mb-4">
+                  Get started with <span className="font-semibold text-green-600">Pro</span> features for free!
+                </p>
+
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2 text-left">What you'll get:</h3>
+                  <ul className="text-xs text-gray-700 space-y-1 text-left">
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-green-600 rounded-full"></div>
+                      <span>Real-time net worth tracking</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-green-600 rounded-full"></div>
+                      <span>Bank-level security & encryption</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-green-600 rounded-full"></div>
+                      <span>AI-powered daily portfolio reports</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-green-600 rounded-full"></div>
+                      <span>Smart notifications on portfolio changes</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <p className="text-xs text-gray-500 mb-6">
+                  All Pro features are <span className="font-semibold text-green-600">completely free</span> for your first 2 months!
+                </p>
+
+                <div className="space-y-2">
+                  <button
+                    onClick={handleConnectFromModal}
+                    className="w-full px-4 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 transition-colors cursor-pointer"
+                  >
+                    Connect Portfolio
+                  </button>
+                  <button
+                    onClick={handleConnectModalClose}
+                    className="w-full px-4 py-2 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    Maybe later
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Disclaimer */}
         <div className="mt-6 px-3 py-3 text-[10px] text-gray-500 leading-relaxed">

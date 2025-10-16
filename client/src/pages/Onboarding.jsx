@@ -5,7 +5,7 @@ import brLogo from '../assets/br.png';
 function Onboarding({ user, onProfile }) {
   const navigate = useNavigate();
   const VITE_APP_API_URL = import.meta.env.VITE_APP_API_URL;
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
   // unified answers payload sent to the server on final submit
@@ -25,11 +25,11 @@ function Onboarding({ user, onProfile }) {
 
   // Top defaults like Navbar
   const topStocks = useMemo(() => ([
-    { ticker: 'AAPL', name: 'Apple Inc.' },
-    { ticker: 'MSFT', name: 'Microsoft Corporation' },
-    { ticker: 'NVDA', name: 'NVIDIA Corporation' },
-    { ticker: 'GOOGL', name: 'Alphabet Inc.' },
-    { ticker: 'AMZN', name: 'Amazon.com Inc.' }
+    { ticker: 'AAPL', name: 'Apple Inc.', logo: 'https://raw.githubusercontent.com/davidepalazzo/ticker-logos/refs/heads/main/ticker_icons/AAPL.png' },
+    { ticker: 'MSFT', name: 'Microsoft Corporation', logo: 'https://raw.githubusercontent.com/davidepalazzo/ticker-logos/refs/heads/main/ticker_icons/MSFT.png' },
+    { ticker: 'NVDA', name: 'NVIDIA Corporation', logo: 'https://raw.githubusercontent.com/davidepalazzo/ticker-logos/refs/heads/main/ticker_icons/NVDA.png' },
+    { ticker: 'GOOGL', name: 'Alphabet Inc.', logo: 'https://raw.githubusercontent.com/davidepalazzo/ticker-logos/refs/heads/main/ticker_icons/GOOGL.png' },
+    { ticker: 'AMZN', name: 'Amazon.com Inc.', logo: 'https://raw.githubusercontent.com/davidepalazzo/ticker-logos/refs/heads/main/ticker_icons/AMZN.png' }
   ]), []);
 
   useEffect(() => {
@@ -95,7 +95,7 @@ function Onboarding({ user, onProfile }) {
 
   const onKeyDown = (e) => {
     if (e.key === 'Enter') {
-      e.preventDefault(); // Always prevent form submission
+      e.preventDefault();
       if (suggestions.length) {
         const s = suggestions[activeIdx] || suggestions[0];
         if (s) addTicker(s.ticker);
@@ -105,9 +105,7 @@ function Onboarding({ user, onProfile }) {
       }
       return;
     }
-
     if (!suggestions.length) return;
-
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActiveIdx(i => Math.min(i + 1, suggestions.length - 1));
@@ -122,11 +120,13 @@ function Onboarding({ user, onProfile }) {
 
   const canNext = useMemo(() => {
     if (step === 1) return !!(answers.experience && answers.goal);
+    if (step === 2) return true;
+    if (step === 3) return answers.watchlist.length >= 3; // Minimum 3 stocks required
     return true;
   }, [step, answers]);
 
   const goNext = () => setStep(s => Math.min(s + 1, 3));
-  const goBack = () => setStep(s => Math.max(s - 1, 1));
+  const goBack = () => setStep(s => Math.max(s - 1, 0));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -170,51 +170,98 @@ function Onboarding({ user, onProfile }) {
     });
   };
 
+  // Build a logo URL for any ticker; used as fallback if s.logo is missing
+  const getLogoUrl = (ticker = '') =>
+    `https://raw.githubusercontent.com/davidepalazzo/ticker-logos/refs/heads/main/ticker_icons/${encodeURIComponent(ticker.trim().toUpperCase())}.png`;
+
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="bg-white w-full max-w-xl rounded-lg shadow-sm border border-gray-200 p-6">
-        <form onSubmit={step === 3 ? handleSubmit : (e) => e.preventDefault()} onKeyDown={(e) => { if (step < 3 && e.key === 'Enter') e.preventDefault(); }} className="space-y-5">          <div className="flex items-center justify-between mb-6">
-          {[1, 2, 3].map((stepNum, idx) => (
-            <React.Fragment key={stepNum}>
-              <div className="flex flex-col items-center flex-1">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${step >= stepNum
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-200 text-gray-500'
-                  }`}>
-                  {stepNum}
-                </div>
-                <div className={`hidden md:block text-xs mt-1 font-medium ${step >= stepNum ? 'text-green-700' : 'text-gray-400'
-                  }`}>
-                  {stepNum === 1 ? 'About You' : stepNum === 2 ? 'Interests' : 'Watchlist'}
-                </div>
-              </div>
-              {idx < 2 && (
-                <div className={`h-0.5 flex-1 mx-2 transition-colors ${step > stepNum ? 'bg-green-600' : 'bg-gray-200'
-                  }`} />
+    <div className="min-h-[80dvh] w-full overflow-y-auto flex flex-col bg-white">
+      <main className={`flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 md:px-8 py-8 ${step === 0 ? 'mt-20' : ''}`}>
+        {step === 0 ? (
+          <section className="w-full">
+            <div className="mx-auto flex items-center justify-center gap-2 mb-4">
+              {brLogo ? (
+                <img src={brLogo} alt="BR" className="h-8 w-8 object-contain" />
+              ) : (
+                <span className="text-gray-900 font-bold">BR</span>
               )}
-            </React.Fragment>
-          ))}
-        </div>
+              <span className="font-sans text-2xl md:text-4xl font-bold text-gray-900 tracking-tight">BullRun</span>
+            </div>
 
-          {/* Step-specific heading */}
-          <div className="mb-6">
-            {step === 1 && (
-              <h2 className="text-lg font-semibold text-gray-900">Tell us about yourself</h2>
-            )}
-            {step === 2 && (
-              <h2 className="text-lg font-semibold text-gray-900">What interests you?</h2>
-            )}
-            {step === 3 && (
-              <h2 className="text-lg font-semibold text-gray-900">Build your watchlist</h2>
-            )}
-          </div>
+            <div className="flex flex-col items-center text-center">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
+                AI-Powered Investment Intelligence
+              </div>
+              <h1 className="mt-10 font-sans text-2xl md:text-4xl font-semibold text-gray-900 tracking-tight">
+                Let&apos;s Personalize Your Experience
+              </h1>
+              <p className="mt-3 text-base md:text-lg text-gray-600 max-w-3xl">
+                Take 2 minutes to share your goals and interests. We&apos;ll create a personalized
+                investment experience that helps you make smarter decisions with confidence.
+              </p>
+            </div>
 
+            <div className="mt-10 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="px-3 py-1.5 bg-green-600 text-white text-sm font-semibold rounded-md hover:bg-green-700 cursor-pointer inline-flex items-center gap-2"
+              >
+                Get Started <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </section>
+        ) : (
+          <>
+            {/* Brand (steps 1–3) */}
+            <div className="mb-6 w-full">
+              <div className="md:flex flex-col md:flex-row mx-auto flex items-center justify-center gap-2">
+                {brLogo ? (
+                  <img src={brLogo} alt="BR" className="h-7 w-7 object-contain" />
+                ) : (
+                  <span className="text-gray-900 font-bold">BR</span>
+                )}
+                <h1 className="font-sans text-xl md:text-3xl font-semibold text-gray-900 tracking-tight text-center md:text-left">
+                  AI-powered financial intelligence built around you
+                </h1>
+              </div>
+            </div>
+          </>
+        )}
+
+        <div className="w-full">
+          {(step >= 1) && (
+            <div className="mb-8">
+              <div className="flex items-center justify-between">
+                {[1, 2, 3].map((stepNum, idx) => (
+                  <React.Fragment key={stepNum}>
+                    <div className="flex flex-col items-center flex-1">
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors
+                        ${step >= stepNum ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'}`}
+                      >
+                        {stepNum}
+                      </div>
+                      <div className={`hidden md:block md:text-[11px] mt-1 font-medium ${step >= stepNum ? 'text-green-700' : 'text-gray-400'}`}>
+                        {stepNum === 1 ? 'About You' : stepNum === 2 ? 'Interests' : 'Watchlist'}
+                      </div>
+                    </div>
+                    {idx < 2 && (
+                      <div className={`h-0.5 flex-1 mx-2 transition-colors ${step > stepNum ? 'bg-green-600' : 'bg-gray-200'}`} />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Step content */}
           {step === 1 && (
-            <div className="space-y-4">
-
-              <div className="space-y-2">
+            <div className="space-y-6">
+              <div className="space-y-3">
                 <label className="block text-xs font-medium text-gray-700">How familiar are you with investing?</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {[
                     { key: 'beginner', label: 'Beginner', emoji: '🐣' },
                     { key: 'intermediate', label: 'Intermediate', emoji: '💼' },
@@ -224,8 +271,10 @@ function Onboarding({ user, onProfile }) {
                       key={opt.key}
                       type="button"
                       onClick={() => setAnswers(a => ({ ...a, experience: opt.key }))}
-                      className={`px-3 py-2 rounded-md text-sm border transition-colors cursor-pointer ${answers.experience === opt.key ? 'border-green-600 text-green-700 bg-green-50' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                        }`}
+                      className={`px-3 py-2 rounded-md text-sm border transition-colors text-left cursor-pointer
+                        ${answers.experience === opt.key
+                          ? 'border-green-600 text-green-700 bg-green-50'
+                          : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
                     >
                       <span className="mr-1">{opt.emoji}</span>{opt.label}
                     </button>
@@ -233,9 +282,9 @@ function Onboarding({ user, onProfile }) {
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <label className="block text-xs font-medium text-gray-700">What's your main goal?</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {[
                     { key: 'informed', label: 'Stay informed' },
                     { key: 'ideas', label: 'Find ideas' },
@@ -245,8 +294,10 @@ function Onboarding({ user, onProfile }) {
                       key={opt.key}
                       type="button"
                       onClick={() => setAnswers(a => ({ ...a, goal: opt.key }))}
-                      className={`px-3 py-2 rounded-md text-sm border transition-colors cursor-pointer ${answers.goal === opt.key ? 'border-green-600 text-green-700 bg-green-50' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                        }`}
+                      className={`px-3 py-2 rounded-md text-sm border transition-colors text-left cursor-pointer
+                        ${answers.goal === opt.key
+                          ? 'border-green-600 text-green-700 bg-green-50'
+                          : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
                     >
                       {opt.label}
                     </button>
@@ -257,9 +308,11 @@ function Onboarding({ user, onProfile }) {
           )}
 
           {step === 2 && (
-            <div className="space-y-3">
-              <label className="block text-xs font-medium text-gray-700">Are there any topics or markets you want your brief to focus on?</label>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-4">
+              <label className="block text-xs font-medium text-gray-700">
+                Are there any topics or markets you want your brief to focus on?
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {interestOptions.map(opt => {
                   const active = answers.interests.includes(opt.key);
                   return (
@@ -267,8 +320,8 @@ function Onboarding({ user, onProfile }) {
                       key={opt.key}
                       type="button"
                       onClick={() => toggleInterest(opt.key)}
-                      className={`px-3 py-2 rounded-md text-sm border flex items-center gap-2 transition-colors cursor-pointer ${active ? 'border-green-600 text-green-700 bg-green-50' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                        }`}
+                      className={`px-3 py-2 rounded-md text-sm border flex items-center gap-2 transition-colors text-left cursor-pointer
+                        ${active ? 'border-green-600 text-green-700 bg-green-50' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
                     >
                       <span>{opt.emoji}</span>
                       <span>{opt.label}</span>
@@ -280,86 +333,125 @@ function Onboarding({ user, onProfile }) {
           )}
 
           {step === 3 && (
-            <div className="space-y-3">
-              <label className="block text-xs font-medium text-gray-700">Want us to track any specific stocks or assets for you?</label>
-              <div className="text-xs text-gray-500">Example: AAPL, TSLA, BTC-USD</div>
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <label className="block text-xs font-medium text-gray-700">
+                  Want us to track any specific stocks or assets for you?
+                  <span className="text-red-600 ml-1">*</span>
+                </label>
+                <div className="text-xs text-gray-500">
+                  Select at least 3 stocks to continue
+                  {answers.watchlist.length > 0 && (
+                    <span className={`ml-2 ${answers.watchlist.length >= 3 ? 'text-green-600' : 'text-red-600'}`}>
+                      ({answers.watchlist.length}/3 minimum)
+                    </span>
+                  )}
+                </div>
 
-              <div className="relative">
-                <input
-                  type="text"
-                  value={q}
-                  onChange={(e) => { setQ(e.target.value); runSearch(e.target.value); }}
-                  onKeyDown={onKeyDown}
-                  onFocus={() => { setFocused(true); if (!q.trim()) { setSuggestions(topStocks); setActiveIdx(topStocks.length ? 0 : -1); } }}
-                  onBlur={() => { setTimeout(() => { setFocused(false); setSuggestions([]); setActiveIdx(-1); }, 150); }}
-                  placeholder="Type a ticker or name..."
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 cursor-pointer"
-                />
-                {!!suggestions.length && (
-                  <ul className="absolute z-50 mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden">
-                    {suggestions.map((s, idx) => (
-                      <li key={s.ticker}>
-                        <button
-                          type="button"
-                          onMouseEnter={() => setActiveIdx(idx)}
-                          onClick={() => addTicker(s.ticker)}
-                          className={`w-full px-3 py-2 text-left text-sm transition-colors cursor-pointer ${idx === activeIdx ? 'bg-gray-50' : 'bg-white'}`}
-                        >
-                          <span className="font-semibold text-gray-900">{s.ticker}</span>
-                          <span className="text-gray-500 ml-2">{s.name}</span>
-                        </button>
-                      </li>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={q}
+                    onChange={(e) => { setQ(e.target.value); runSearch(e.target.value); }}
+                    onKeyDown={onKeyDown}
+                    onFocus={() => { setFocused(true); if (!q.trim()) { setSuggestions(topStocks); setActiveIdx(topStocks.length ? 0 : -1); } }}
+                    onBlur={() => { setTimeout(() => { setFocused(false); setSuggestions([]); setActiveIdx(-1); }, 150); }}
+                    placeholder="Type a ticker or name..."
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-500 cursor-pointer"
+                  />
+                  {!!suggestions.length && (
+                    <ul className="absolute z-50 mt-2 w-full bg-white border border-gray-200 rounded-md shadow-lg overflow-auto max-h-48">
+                      {suggestions.map((s, idx) => (
+                        <li key={s.ticker}>
+                          <button
+                            type="button"
+                            onMouseEnter={() => setActiveIdx(idx)}
+                            onClick={() => addTicker(s.ticker)}
+                            className={`w-full px-3 py-2 text-left text-sm transition-colors cursor-pointer ${idx === activeIdx ? 'bg-gray-50' : 'bg-white'}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 bg-black rounded flex items-center justify-center flex-shrink-0">
+                                <img
+                                  src={s.logo || getLogoUrl(s.ticker)}
+                                  alt={s.ticker}
+                                  className="w-6 h-6 object-contain"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    e.currentTarget.parentElement.innerHTML = `<span class="text-white text-xs font-semibold">${(s.ticker || '?')[0]}</span>`;
+                                  }}
+                                />
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-semibold text-gray-900">{s.ticker}</span>
+                                <span className="text-gray-500 text-xs truncate">{s.name}</span>
+                              </div>
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {!!answers.watchlist.length && (
+                  <div className="flex flex-wrap gap-2">
+                    {answers.watchlist.map(t => (
+                      <span key={t} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 text-gray-700 text-xs border border-gray-200">
+                        <div className="w-4 h-4 bg-black rounded flex items-center justify-center flex-shrink-0">
+                          <img
+                            src={getLogoUrl(t)}
+                            alt={t}
+                            className="w-3 h-3 object-contain"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.parentElement.innerHTML = `<span class="text-white text-[8px] font-semibold">${t[0]}</span>`;
+                            }}
+                          />
+                        </div>
+                        {t}
+                        <button type="button" onClick={() => removeTicker(t)} className="text-gray-500 hover:text-gray-700 cursor-pointer">×</button>
+                      </span>
                     ))}
-                  </ul>
+                  </div>
                 )}
               </div>
-
-              {!!answers.watchlist.length && (
-                <div className="flex flex-wrap gap-2">
-                  {answers.watchlist.map(t => (
-                    <span key={t} className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 text-gray-700 text-xs border border-gray-200">
-                      {t}
-                      <button type="button" onClick={() => removeTicker(t)} className="text-gray-500 hover:text-gray-700 cursor-pointer">×</button>
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
-          <div className="flex items-center justify-between pt-2">
-            <button
-              type="button"
-              onClick={goBack}
-              disabled={step === 1}
-              className="px-3 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60 cursor-pointer"
-            >
-              Back
-            </button>
-
-            {step < 3 ? (
+          {(step >= 1) && (
+            <div className="flex items-center justify-between pt-8">
               <button
                 type="button"
-                onClick={goNext}
-                disabled={!canNext}
-                className="px-3 py-2 bg-green-600 text-white text-sm font-semibold rounded-md hover:bg-green-700 disabled:opacity-60 cursor-pointer"
+                onClick={goBack}
+                disabled={step === 0}
+                className="px-3 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60 cursor-pointer"
               >
-                Continue
+                Back
               </button>
-            ) : (
-              (
+
+              {step < 3 ? (
                 <button
-                  type="submit"
-                  disabled={submitting}
+                  type="button"
+                  onClick={goNext}
+                  disabled={!canNext}
+                  className="px-3 py-2 bg-green-600 text-white text-sm font-semibold rounded-md hover:bg-green-700 disabled:opacity-60 cursor-pointer"
+                >
+                  Continue
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={!canNext || submitting}
                   className="px-3 py-2 bg-green-600 text-white text-sm font-semibold rounded-md hover:bg-green-700 disabled:opacity-60 cursor-pointer"
                 >
                   {submitting ? 'Saving...' : 'Finish'}
                 </button>
-              )
-            )}
-          </div>
-        </form>
-      </div>
+              )}
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

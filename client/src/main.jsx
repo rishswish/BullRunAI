@@ -18,7 +18,7 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById("root")).render(
   <QueryClientProvider client={queryClient}>
     <HeroUIProvider>
-      <main className="light w-[100dvw] h-[100dvh] text-foreground bg-background">
+      <main className="light w-[100dvw] h-[100dvh] text-foreground bg-white">
         <App />
       </main>
     </HeroUIProvider>

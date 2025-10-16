@@ -168,7 +168,14 @@ function Login({ onLoginSuccess = () => { } }) {
     return true;
   }, [step, answers, email]);
 
-  const goBack = () => setStep(s => Math.max(s - 1, 0));
+  const goBack = () => {
+    // If we're on step 4 and came via nav sign-in, go back to step 0
+    if (step === 4 && viaNavSignIn) {
+      setStep(0);
+    } else {
+      setStep(s => Math.max(s - 1, 0));
+    }
+  };
 
   const resetAll = () => {
     setStep(0);

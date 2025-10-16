@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Sun, Bell, Calendar, X, Menu } from 'lucide-react';
+import { Search, Sun, Bell, Calendar, X, Menu, Landmark } from 'lucide-react';
 import bullrunLogo from '../assets/br.png';
 
 function Navbar({ onLogout, user, theme, onThemeChange }) {
@@ -232,9 +232,7 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
               : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
               }`}
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2 2H5a2 2 0 00-2 2z" />
-            </svg>
+            <Landmark className="w-3.5 h-3.5" />
             Portfolio
           </Link>
         </div>
@@ -339,6 +337,19 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
 
       {/* Right side - Actions */}
       <div className="flex items-center gap-2">
+        {/* Mobile: Portfolio icon */}
+        <Link
+          to="/portfolio"
+          className={`md:hidden p-1.5 rounded-md transition-all duration-200 cursor-pointer ${
+            location.pathname === '/portfolio'
+              ? 'text-green-600 bg-green-50'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+          aria-label="Portfolio"
+        >
+          <Landmark className="w-5 h-5" />
+        </Link>
+
         {/* Mobile: search toggle */}
         <button
           type="button"
@@ -354,7 +365,7 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
         </button>
 
         {/* Theme toggle with animation */}
-        <button
+        {/* <button
           type="button"
           onClick={() => {
             const newTheme = theme === 'light' ? 'dark' : 'light';
@@ -365,7 +376,7 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
           ref={themeRef}
         >
           
-          {/* <div className="relative w-4 h-4">
+          <div className="relative w-4 h-4">
             <Sun className={`w-4 h-4 absolute inset-0 transition-all duration-500 ${theme === 'light' ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 rotate-180 scale-50' }`} />
             <svg
               className={`w-4 h-4 absolute inset-0 transition-all duration-500 ${theme === 'dark'
@@ -383,10 +394,9 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
                 d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
               />
             </svg>
-          </div> */}
-          {/* Ripple effect on click */}
+          </div>
           <span className="absolute inset-0 bg-green-400 opacity-0 group-active:opacity-20 transition-opacity duration-200 rounded-md" />
-        </button>
+        </button> */}
 
         {/* Pro button hidden on very small screens */}
         <button
@@ -632,9 +642,7 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
                   : 'text-gray-700 hover:text-gray-900 hover:bg-gray-50'
                   }`}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2 2H5a2 2 0 00-2 2z" />
-                </svg>
+                <Landmark className="w-5 h-5" />
                 Portfolio
               </Link>
             </div>

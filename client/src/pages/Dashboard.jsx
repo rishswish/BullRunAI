@@ -66,16 +66,6 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
     },
   });
 
-  // NOW the conditional returns are safe - all hooks are declared above
-  const newsItems = (marketData?.news?.slice(0, 6)) || [
-    { title: 'Tech leads market rebound; AI stocks surge', date: marketData?.mainArticle?.date || '', summary: 'Growth shares advance as yields stabilize; investors rotate back into risk.', url: 'https://news.example.com/ai-rebound' },
-    { title: 'Oil retreats as supply outlook improves', date: marketData?.mainArticle?.date || '', summary: 'Crude falls after reports of increased output; inflation expectations ease.', url: 'https://news.example.com/oil-retreats' },
-    { title: 'Fed minutes signal data-dependent stance', date: marketData?.mainArticle?.date || '', summary: 'Officials emphasize flexibility; markets price in steady rates near-term.', url: 'https://news.example.com/fed-minutes' },
-    { title: 'Dollar eases, boosting EM assets', date: marketData?.mainArticle?.date || '', summary: 'Greenback slips; emerging market equities and FX find support.', url: 'https://news.example.com/dollar-eases' },
-    { title: 'Earnings season kicks off with beats', date: marketData?.mainArticle?.date || '', summary: 'Several bellwethers top expectations; guidance mixed but improving.', url: 'https://news.example.com/earnings-beats' },
-    { title: 'Yields dip; risk appetite improves', date: marketData?.mainArticle?.date || '', summary: 'Treasury yields edge lower as markets price softer inflation path.', url: 'https://news.example.com/yields-dip' }
-  ];
-
   // New datasets from API
   const watchlistStocks = marketData?.watchlistStocks || [];
   const topMarketMovers = marketData?.topStocks || [];
@@ -558,90 +548,89 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
         </div>
 
         {/* News Row - Full width rows with images */}
-        <div className="bg-white rounded-md p-6 shadow-sm border border-gray-200">
-          <div className="flex items-start gap-2.5 mb-4">
-            <div className="p-1.5 bg-green-50 rounded flex-shrink-0">
-              <TrendingUp className="w-3.5 h-3.5 text-green-600" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-md font-bold text-gray-900 mb-0.5 leading-tight">In The News</h2>
-              <p className="text-sm text-gray-500">{marketData?.mainArticle?.date || ''}</p>
+        <div className="bg-white rounded-md shadow-sm border border-gray-200">
+          <div className="px-3.5 pt-3 pb-2 border-b border-gray-100">
+            <div className="flex items-center gap-1.5">
+              <TrendingUp className="w-4 h-4 text-green-600" />
+              <h3 className="font-bold text-gray-900 text-sm">In The News</h3>
             </div>
           </div>
-          <div className="flex flex-col gap-4">
-            {(marketData?.news || [])
-              .sort((a, b) => {
-                const dateA = new Date(a.date || a.published || 0);
-                const dateB = new Date(b.date || b.published || 0);
-                return dateB - dateA; // Most recent first (descending)
-              })
-              .slice(0, 6)
-              .map((item, idx) => {
-                const href = item.url || item.link || '#';
-                const imageUrl = item.image_url || item.thumbnail_url || item.image || null;
+          <div className="px-3.5 py-3">
+            <div className="flex flex-col gap-4">
+              {(marketData?.news || [])
+                .sort((a, b) => {
+                  const dateA = new Date(a.date || a.published || 0);
+                  const dateB = new Date(b.date || b.published || 0);
+                  return dateB - dateA; // Most recent first (descending)
+                })
+                .slice(0, 6)
+                .map((item, idx) => {
+                  const href = item.url || item.link || '#';
+                  const imageUrl = item.image_url || item.thumbnail_url || item.image || null;
 
-                return (
-                  <a
-                    key={idx}
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex flex-col border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 focus-visible:ring-offset-2"
-                  >
-                    {/* Publisher Info at top */}
-                    {item.publisher && (
-                      <div className="flex items-center gap-2 mb-3">
-                        {item.publisher.logo_url && (
-                          <img
-                            src={item.publisher.logo_url}
-                            alt={item.publisher.name || 'publisher'}
-                            className="w-5 h-5 object-contain rounded"
-                            loading="lazy"
-                          />
-                        )}
-                        <span className="text-xs text-gray-500 font-medium">
-                          {item.publisher.name || 'Unknown Publisher'}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Image and Content side by side */}
-                    <div className="flex flex-col md:flex-row gap-4">
-                      {/* News Image */}
-                      {imageUrl && (
-                        <div className="flex-shrink-0 w-32 h-24 md:w-48 md:h-32 rounded-lg overflow-hidden bg-gray-100">
-                          <img
-                            src={imageUrl != "" ? imageUrl : item.publisher?.logo_url}
-                            alt={item.title}
-                            className="w-full h-full object-contain"
-                            loading="lazy"
-                            onError={(e) => {
-                              // Fallback to publisher logo if main image fails
-                              if (item.publisher?.logo_url && e.currentTarget.src !== item.publisher.logo_url) {
-                                e.currentTarget.src = item.publisher.logo_url;
-                              } else {
-                                // If publisher logo also fails or doesn't exist, hide the image container
-                                e.currentTarget.style.display = 'none';
-                                e.currentTarget.parentElement.classList.add('hidden');
-                              }
-                            }}
-                          />
+                  return (
+                    <a
+                      key={idx}
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group flex flex-col rounded-lg p-4"
+                    >
+                      {/* Publisher Info at top */}
+                      {item.publisher && (
+                        <div className="flex items-center gap-2 mb-3">
+                          {item.publisher.logo_url && (
+                            <img
+                              src={item.publisher.logo_url}
+                              alt={item.publisher.name || 'publisher'}
+                              className="w-5 h-5 object-contain rounded"
+                              loading="lazy"
+                            />
+                          )}
+                          <span className="text-xs text-gray-500 font-medium">
+                            {item.publisher.name || 'Unknown Publisher'}
+                          </span>
                         </div>
                       )}
 
-                      {/* Content */}
-                      <div className="flex-1 min-w-0 flex flex-col">
-                        <h3 className="text-sm font-bold text-gray-900 leading-snug mb-2 group-hover:text-green-700">
-                          {item.title}
-                        </h3>
-                        <p className="text-xs text-gray-500 mb-2">{adjustNewsDate(item.date || item.published, 0)}</p>
-                        <p className="text-sm text-gray-700 line-clamp-3 mb-2">{item.summary || item.description}</p>
-                        <span className="text-xs font-semibold text-green-700 group-hover:underline">Read more →</span>
+                      {/* Image and Content side by side */}
+                      <div className="flex flex-col md:flex-row gap-4">
+                        {/* News Image */}
+                        {imageUrl && (
+                          <div className="flex-shrink-0 w-full h-fit md:w-60 md:h-fit rounded-lg overflow-hidden bg-white">
+                            <img
+                              src={imageUrl != "" ? imageUrl : item.publisher?.logo_url}
+                              alt={item.title}
+                              className="w-full h-full object-contain"
+                              loading="lazy"
+                              onError={(e) => {
+                                // Fallback to publisher logo if main image fails
+                                if (item.publisher?.logo_url && e.currentTarget.src !== item.publisher.logo_url) {
+                                  e.currentTarget.src = item.publisher.logo_url;
+                                } else {
+                                  // If publisher logo also fails or doesn't exist, hide the image container
+                                  e.currentTarget.style.display = 'none';
+                                  e.currentTarget.parentElement.classList.add('hidden');
+                                }
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0 flex flex-col">
+                          <h3 className="text-md font-bold text-gray-900 leading-snug mb-2 group-hover:text-green-700">
+                            {item.title}
+                          </h3>
+                          <p className="text-xs text-gray-500 mb-2">{adjustNewsDate(item.date || item.published, 0)}</p>
+                          <p className="text-sm text-gray-700 line-clamp-3 mb-2">{item.summary || item.description}</p>
+                          <span className="text-xs font-semibold text-green-700 group-hover:underline">Read more →</span>
+                        </div>
                       </div>
-                    </div>
-                  </a>
-                );
-              })}
+                    </a>
+                  );
+                })}
+            </div>
           </div>
         </div>
 

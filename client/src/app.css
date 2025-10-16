@@ -8,7 +8,7 @@
 }
 
 html, body {
-  background: #000000;
+  background: white;
   height: fit-content;
   scroll-behavior: smooth;
   width: 100vw;
