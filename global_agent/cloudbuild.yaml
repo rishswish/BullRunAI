@@ -9,6 +9,7 @@ steps:
       - .
       - '-f'
       - global_agent/Dockerfile
+      - global-agent
 
   # Push the container image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
