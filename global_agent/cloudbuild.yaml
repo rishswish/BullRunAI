@@ -1,25 +1,22 @@
 steps:
-  # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Build the container image'
     args:
       - 'build'
       - '-t'
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br-global-agent:latest'
-      - .
       - '-f'
-      - global_agent/Dockerfile
-      - global-agent
+      - 'global_agent/Dockerfile'
+      - 'global_agent'
 
-  # Push the container image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     id: 'Push the container image'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br-global-report-agent:latest'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br-global-agent:latest'
 
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br-global-report-agent:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br-global-agent:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
