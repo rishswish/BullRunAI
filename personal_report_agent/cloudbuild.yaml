@@ -6,7 +6,7 @@ steps:
       - 'build'
       - '-t'
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br-personal-report-agent:latest'
-      - .
+      - personal_report_agent
       - '-f'
       - personal_report_agent/Dockerfile
 
