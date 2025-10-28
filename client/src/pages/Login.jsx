@@ -1,6 +1,7 @@
 import React from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import brLogo from '../assets/br.png';
+import recording from '../assets/Recording 2025-10-28 104816.mp4';
 
 function Login({ onLoginSuccess = () => { } }) {
   const VITE_APP_API_URL = import.meta.env.VITE_APP_API_URL;
@@ -236,7 +237,7 @@ function Login({ onLoginSuccess = () => { } }) {
 
   return (
     <div className="relative min-h-[100dvh] w-full overflow-y-auto flex flex-col bg-gradient-to-b from-[#f7f7f7] from-0% via-white via-35% to-[#d9fbe5] to-80% login-page">
-      <main className={`flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 md:px-8 py-8 ${step === 0 ? 'mt-20' : ''}`}>
+      <main className={`flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 md:px-8 py-8 ${step === 0 ? 'mt-20' : ''}`}>
         {step === 0 ? (
           <section className="w-full">
             <div className="mx-auto flex items-center justify-center gap-2 mb-4">
@@ -261,7 +262,6 @@ function Login({ onLoginSuccess = () => { } }) {
                 investment experience that helps you make smarter decisions with confidence.
               </p>
             </div>
-
             <div className="mt-10 flex justify-center gap-4">
               <button
                 type="button"
@@ -280,6 +280,19 @@ function Login({ onLoginSuccess = () => { } }) {
                 Get Started <span aria-hidden="true">→</span>
               </button>
             </div>
+
+            <div className='w-full h-full mt-15 rounded-xl overflow-hidden border-6 border-gray-200'>
+              <video
+                src={recording}
+                className="w-full h-full object-cover"
+                autoPlay
+                muted
+                loop
+                controls
+                playsInline
+              />
+            </div>
+
           </section>
         ) : (
           <>
