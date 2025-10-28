@@ -5,6 +5,7 @@ import Loading from '../components/Loading';
 import { useNavigate } from 'react-router-dom';
 import ComparisonChart from '../components/ComparisonChart';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import '../theme.css';
 
 function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
   console.log('isMobile', isMobile);
@@ -295,7 +296,7 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
 
       // Generate filename with current date
       const date = new Date().toISOString().split('T')[0];
-      pdf.save(`BullRun-Dashboard-${date}.pdf`);
+      pdf.save(`Spade-Dashboard-${date}.pdf`);
 
       // Reset cursor
       document.body.style.cursor = originalCursor;
@@ -416,8 +417,7 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
                       <div
                         key={index}
                         onClick={() => navigate(`/dashboard/${stock.symbol}`)}
-                        className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 transition-colors rounded px-2 -mx-2"
-                      >
+                        className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors rounded px-2 -mx-2"                      >
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           <div className="w-7 h-7 bg-black rounded flex items-center justify-center flex-shrink-0">
                             {t.logo ? (
@@ -745,8 +745,8 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
         {/* Disclaimer - Keep as is */}
         <div className="mt-6 px-3 py-3 text-[10px] text-gray-500 leading-relaxed">
           <p>
-            BullRun, Inc. ("BullRun") is in the process of applying for registration as an investment adviser with the U.S. Securities and Exchange Commission.
-            Until registration is effective BullRun does not provide investment advisory services to the public and is not soliciting clients in any jurisdiction
+            Spade, Inc. ("Spade") is in the process of applying for registration as an investment adviser with the U.S. Securities and Exchange Commission.
+            Until registration is effective Spade does not provide investment advisory services to the public and is not soliciting clients in any jurisdiction
             where such solicitation or provision of services would be unlawful prior to registration or notice filing. All information on this site is for
             informational purposes only and should not be construed as investment advice, an offer, or a solicitation to buy or sell any security.
           </p>

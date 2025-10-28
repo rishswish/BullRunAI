@@ -94,7 +94,7 @@ function Ticker({ user, isMobile }) {
   const visibleAbout = aboutExpanded || !isLong ? aboutText : aboutText.slice(0, ABOUT_LIMIT).trimEnd() + '…';
 
   return (
-    <div className="w-full h-full overflow-auto bg-[#fafafa]">
+    <div className="w-full h-full overflow-auto">
       <div className="px-6 py-6 max-w-5xl mx-auto">
         {/* Back + breadcrumb */}
         <nav className="mb-4 text-xs text-gray-500" aria-label="Breadcrumb">
@@ -124,7 +124,7 @@ function Ticker({ user, isMobile }) {
         {/* Two cards */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Company Info */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div className=" rounded-xl border border-gray-200 shadow-sm">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
               <Building className="w-4 h-4 text-gray-500" />
               <h2 className="text-[15px] font-semibold text-gray-900">Company Info</h2>
@@ -182,7 +182,7 @@ function Ticker({ user, isMobile }) {
           </div>
 
           {/* Price */}
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <div className=" rounded-xl border border-gray-200 shadow-sm">
             <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
               <ChartLine className="w-4 h-4 text-gray-500" />
               <h2 className="text-[15px] font-semibold text-gray-900">Price</h2>

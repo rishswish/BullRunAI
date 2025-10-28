@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Wallet, TrendingUp, BarChart2, PieChart as PieIcon, RefreshCw, Trophy, Building2, Plus, Eye, EyeOff, X, Landmark } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import Loading from '../components/Loading';
+import { useNavigate } from 'react-router-dom';
 
 // Demo dataset (brokers, balances, holdings, transactions)
 const KNOWN_BROKER_MAP = {
@@ -70,12 +71,20 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedBroker, setSelectedBroker] = useState('');
   const [loginUrl, setLoginUrl] = useState('');
+
   const [awaitingCompletion, setAwaitingCompletion] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Demo mode (eye)
   const [demoMode, setDemoMode] = useState(false);
   const [demoPortfolio, setDemoPortfolio] = useState(null);
+
+  // Router
+  const navigate = useNavigate();
+  const handleTickerClick = (sym) => {
+    if (!sym) return;
+    navigate(`/dashboard/${encodeURIComponent(String(sym).toUpperCase())}`);
+  };
 
   // Account filter (multi-select)
   const [selectedAccountIds, setSelectedAccountIds] = useState([]);
@@ -192,6 +201,9 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
   useEffect(() => {
     // Check if we've already shown the connect modal to this user
     const hasSeenConnectModal = localStorage.getItem('hasSeenConnectModal');
+    const connectModalData = hasSeenConnectModal ? JSON.parse(hasSeenConnectModal) : null;
+    const isConnectModalExpired = connectModalData ?
+      (Date.now() - connectModalData.timestamp) > (24 * 60 * 60 * 1000) : true; // 1 day in milliseconds
 
     // Show connect modal if:
     // 1. User has no connected accounts
@@ -211,7 +223,10 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
   const handleConnectFromModal = () => {
     setShowConnectModal(false);
     // Mark that user has seen the modal
-    localStorage.setItem('hasSeenConnectModal', 'true');
+    localStorage.setItem('hasSeenConnectModal', JSON.stringify({
+      seen: true,
+      timestamp: Date.now()
+    }));
     // Open the connect modal
     openConnectModal();
   };
@@ -367,10 +382,11 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                 setSelectedAccountIds(DEMO_ACCOUNTS.map(a => a.id));
               }
             }}
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${demoMode ? 'text-green-600 bg-green-50' : 'text-gray-600 hover:bg-gray-100'}`}
+
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors cursor-pointer"
             title={demoMode ? 'Exit demo mode' : 'Enter demo mode'}
           >
-            {demoMode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            Demo
           </button>
         </div>
 
@@ -517,8 +533,8 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                     </div>
                     <h3 className="text-md font-semibold text-gray-900">Cash</h3>
                   </div>
-                  <p className="text-xs text-gray-500 mb-2">Across selected accounts</p>
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalBalance)}</p>
+                  <p className="text-[9px] text-gray-500 mb-2">Across selected accounts</p>
+                  <p className="text-xl font-bold text-green-600">{formatCurrency(totalBalance)}</p>
                 </div>
               </div>
             </div>
@@ -533,8 +549,8 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                     </div>
                     <h3 className="text-md font-semibold text-gray-900">Investments</h3>
                   </div>
-                  <p className="text-xs text-gray-500 mb-2">Excluding cash positions</p>
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalInvestments)}</p>
+                  <p className="text-[9px] text-gray-500 mb-2">Excluding cash positions</p>
+                  <p className="text-xl font-bold text-green-600">{formatCurrency(totalInvestments)}</p>
                 </div>
               </div>
             </div>
@@ -641,12 +657,16 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                     <div key={`legend-${idx}`} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
                         <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                        <span className="text-gray-900 font-medium truncate max-w-[180px]">{h.symbol || h.name}</span>
+                        <button
+                          onClick={() => h.symbol && handleTickerClick(h.symbol)}
+                          className="text-gray-900 font-medium truncate max-w-[180px] hover:underline text-left cursor-pointer"
+                        >
+                          {h.symbol || h.name}
+                        </button>
                       </div>
                       <div className="text-right text-gray-600 flex items-center gap-3">
                         <span>{formatCurrency(h.marketValue || 0)}</span>
-                        <span className="text-[10px] text-gray-500">{(h.weight ?? 0).toFixed ? (h.weight).toFixed(1) : h.weight}%</span>
-                      </div>
+                        <span className="text-[10px] text-gray-500">{(h.weight ?? 0).toFixed ? (h.weight).toFixed(1) : h.weight}%</span>                      </div>
                     </div>
                   ))}
                 </div>
@@ -702,7 +722,14 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                             <td className="py-2 pr-4 text-gray-700">{t.date}</td>
                             <td className="py-2 pr-4 text-gray-700">{t.date}</td>
                             <td className="py-2 pr-4 text-gray-700">{acct?.institution || 'Account'}</td>
-                            <td className="py-2 pr-4 text-gray-900 font-medium">{t.symbol}</td>
+                            <td className="py-2 pr-4">
+                              <button
+                                onClick={() => handleTickerClick(t.symbol)}
+                                className="text-gray-900 font-medium hover:underline text-left cursor-pointer"
+                              >
+                                {t.symbol}
+                              </button>
+                            </td>
                             <td className={`py-2 pr-4 font-semibold ${t.action === 'BUY' ? 'text-green-600' : 'text-red-600'}`}>{t.action}</td>
                             <td className="py-2 pr-4 text-right text-gray-700">{Number(t.quantity ?? 0).toLocaleString('en-US', { maximumFractionDigits: 9 })}</td>
                             <td className="py-2 pr-0 text-right text-gray-700">{formatCurrency(t.price)}</td>
@@ -741,12 +768,15 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                         const acct = (p.accounts || []).find(a => a.id === o.accountId);
                         return (
                           <tr key={o.brokerageOrderId} className="border-b border-gray-50">
-                            <td className="py-2 pr-4 text-gray-700">{o.timeUpdated || o.timePlaced || ''}</td>
                             <td className="py-2 pr-4 text-gray-700">{acct?.institution || 'Account'}</td>
-                            <td className="py-2 pr-4 text-gray-900 font-medium">{o.symbol}</td>
-                            <td className={`py-2 pr-4 font-semibold ${String(o.action).toUpperCase() === 'BUY' ? 'text-green-600' : 'text-red-600'}`}>{o.action}</td>
-                            <td className="py-2 pr-4 text-right text-gray-700">{Number(o.filledQuantity ?? o.totalQuantity ?? 0).toLocaleString('en-US', { maximumFractionDigits: 9 })}</td>
-                            <td className="py-2 pr-0 text-right text-gray-700">{o.orderType || ''}</td>
+                            <td className="py-2 pr-4">
+                              <button
+                                onClick={() => handleTickerClick(o.symbol)}
+                                className="text-gray-900 font-medium hover:underline text-left cursor-pointer"
+                              >
+                                {o.symbol}
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -776,17 +806,23 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
           ) : (
             <div className="text-xs text-gray-700">
               <ul className="space-y-2">
-                {topHoldings.map((h, i) => (
-                  <li key={`${h.symbol}-${i}`} className="flex items-center justify-between border-b border-gray-100 pb-2">
-                    <div>
-                      <p className="font-semibold text-gray-900 text-[12px]">{h.symbol || h.name || 'Security'}</p>
-                      <p className="text-[10px] text-gray-500">{h.name || ''}</p>
+                {(topHoldings || []).slice(0, 10).map((h, idx) => (
+                  <div
+                    key={`legend-${idx}`}
+                    className="flex items-center justify-between text-xs cursor-pointer"
+                    onClick={() => handleTickerClick(h.symbol || h.name)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
+                      <span className="text-gray-900 font-medium truncate max-w-[180px] hover:underline">
+                        {h.symbol || h.name}
+                      </span>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-gray-900 text-[12px]">{formatCurrency(h.marketValue || 0)}</p>
-                      <p className="text-[10px] text-gray-500">{(h.weight ?? 0)}%</p>
+                    <div className="text-right text-gray-600 flex items-center gap-3">
+                      <span>{formatCurrency(h.marketValue || 0)}</span>
+                      <span className="text-[10px] text-gray-500">{(h.weight ?? 0).toFixed ? (h.weight).toFixed(1) : h.weight}%</span>
                     </div>
-                  </li>
+                  </div>
                 ))}
               </ul>
             </div>
@@ -902,8 +938,8 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
         {/* Disclaimer */}
         <div className="mt-6 px-3 py-3 text-[10px] text-gray-500 leading-relaxed">
           <p>
-            BullRun, Inc. ("BullRun") is in the process of applying for registration as an investment adviser with the U.S. Securities and Exchange Commission.
-            Until registration is effective BullRun does not provide investment advisory services to the public and is not soliciting clients in any jurisdiction
+            Spade, Inc. ("Spade") is in the process of applying for registration as an investment adviser with the U.S. Securities and Exchange Commission.
+            Until registration is effective Spade does not provide investment advisory services to the public and is not soliciting clients in any jurisdiction
             where such solicitation or provision of services would be unlawful prior to registration or notice filing. All information on this site is for
             informational purposes only and should not be construed as investment advice, an offer, or a solicitation to buy or sell any security.
           </p>

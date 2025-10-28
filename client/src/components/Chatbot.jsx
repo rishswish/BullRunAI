@@ -1,17 +1,29 @@
-import React, { useState } from 'react';
-import { X, MessageSquare, Send, ChevronRight, ChevronLeft } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, MessageSquare, Send, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
 
-function Chatbot({ isOpen, setIsOpen }) {
+function Chatbot({ isOpen, setIsOpen, user }) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState([
     {
       type: 'bot',
-      text: 'Hi! I\'m BullRun, your investment assistant. How can I help you today?',
+      text: 'Hi! I\'m Spade, your investment assistant. How can I help you today?',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
+  
+  const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
 
-  const handleSendMessage = () => {
+  // Auto-scroll to bottom when messages change
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSendMessage = async () => {
     if (!message.trim()) return;
 
     const newMessage = {
@@ -20,18 +32,56 @@ function Chatbot({ isOpen, setIsOpen }) {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    setMessages([...messages, newMessage]);
+    setMessages(prev => [...prev, newMessage]);
+    const currentMessage = message;
     setMessage('');
 
-    setTimeout(() => {
+    // Show loading indicator with spinner
+    const loadingMessage = {
+      type: 'bot',
+      text: 'Spade is thinking...',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isTyping: true
+    };
+    setMessages(prev => [...prev, loadingMessage]);
+
+    try {
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Remove loading indicator
+      setMessages(prev => prev.filter(msg => !msg.isTyping));
+
+      // Return default response
       const botResponse = {
         type: 'bot',
-        text: 'I\'m analyzing your request. This is a demo response. In production, I would provide detailed market insights and investment recommendations.',
+        text: 'Thank you for your message! I\'m currently in development mode. Your message has been received and I\'ll be able to provide more detailed responses soon.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, botResponse]);
-    }, 1000);
+
+    } catch (error) {
+      console.error('Chatbot error:', error);
+
+      // Remove loading indicator
+      setMessages(prev => prev.filter(msg => !msg.isTyping));
+
+      const errorResponse = {
+        type: 'bot',
+        text: 'Sorry, I\'m having trouble connecting. Please check your internet connection and try again.',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, errorResponse]);
+    }
   };
+
+  // Loading spinner component
+  const LoadingSpinner = () => (
+    <div className="flex items-center gap-2">
+      <Loader2 className="w-3 h-3 animate-spin text-green-600" />
+      <span className="text-xs text-gray-500">Spade is thinking...</span>
+    </div>
+  );
 
   return (
     <>
@@ -60,7 +110,7 @@ function Chatbot({ isOpen, setIsOpen }) {
                   <MessageSquare className="w-4 h-4 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="font-bold text-gray-900 text-xs">Chat with BullRun</h3>
+                  <h3 className="font-bold text-gray-900 text-xs">Chat with Spade</h3>
                   <p className="text-[10px] text-gray-500 leading-tight">Discuss investments and manage your strategies</p>
                 </div>
               </div>
@@ -78,29 +128,33 @@ function Chatbot({ isOpen, setIsOpen }) {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3">
             {messages.map((msg, index) => (
               <div key={index} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] ${msg.type === 'user' ? 'order-2' : 'order-1'}`}>
-                  {msg.type === 'bot' && (
+                  {msg.type === 'bot' && !msg.isTyping && (
                     <div className="flex items-center gap-1.5 mb-1">
                       <div className="w-5 h-5 bg-green-600 rounded-full flex items-center justify-center">
                         <span className="text-white text-[8px] font-bold">BR</span>
                       </div>
-                      <span className="text-[10px] font-medium text-gray-700">BullRun</span>
+                      <span className="text-[10px] font-medium text-gray-700">Spade</span>
                     </div>
                   )}
-                  <div className={`px-3 py-2 rounded-lg ${
-                    msg.type === 'user' 
-                      ? 'bg-green-600 text-white ml-auto' 
+                  <div className={`px-3 py-2 rounded-lg ${msg.type === 'user'
+                      ? 'bg-green-600 text-white ml-auto'
                       : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    <p className="text-xs leading-relaxed">{msg.text}</p>
+                    }`}>
+                    {msg.isTyping ? (
+                      <LoadingSpinner />
+                    ) : (
+                      <p className="text-xs leading-relaxed">{msg.text}</p>
+                    )}
                   </div>
                   <p className="text-[9px] text-gray-400 mt-0.5 px-1">{msg.time}</p>
                 </div>
               </div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Input */}
@@ -137,7 +191,7 @@ function Chatbot({ isOpen, setIsOpen }) {
                     <MessageSquare className="w-4 h-4 text-white" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-bold text-gray-900 text-xs">Chat with BullRun</h3>
+                    <h3 className="font-bold text-gray-900 text-xs">Chat with Spade</h3>
                     <p className="text-[10px] text-gray-500 leading-tight">Discuss investments and manage your strategies</p>
                   </div>
                 </div>
@@ -155,29 +209,33 @@ function Chatbot({ isOpen, setIsOpen }) {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3">
               {messages.map((msg, index) => (
                 <div key={index} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[85%] ${msg.type === 'user' ? 'order-2' : 'order-1'}`}>
-                    {msg.type === 'bot' && (
+                    {msg.type === 'bot' && !msg.isTyping && (
                       <div className="flex items-center gap-1.5 mb-1">
                         <div className="w-5 h-5 bg-green-600 rounded-full flex items-center justify-center">
                           <span className="text-white text-[8px] font-bold">BR</span>
                         </div>
-                        <span className="text-[10px] text-gray-700 font-medium">BullRun</span>
+                        <span className="text-[10px] text-gray-700 font-medium">Spade</span>
                       </div>
                     )}
-                    <div className={`px-3 py-2 rounded-lg ${
-                      msg.type === 'user' 
-                        ? 'bg-green-600 text-white ml-auto' 
+                    <div className={`px-3 py-2 rounded-lg ${msg.type === 'user'
+                        ? 'bg-green-600 text-white ml-auto'
                         : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      <p className="text-xs leading-relaxed">{msg.text}</p>
+                      }`}>
+                      {msg.isTyping ? (
+                        <LoadingSpinner />
+                      ) : (
+                        <p className="text-xs leading-relaxed">{msg.text}</p>
+                      )}
                     </div>
                     <p className="text-[9px] text-gray-400 mt-0.5 px-1">{msg.time}</p>
                   </div>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Input */}

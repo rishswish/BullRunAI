@@ -5,3 +5,4 @@ google-cloud-firestore
 requests
 snaptrade-python-sdk
 gunicorn
+google-genai

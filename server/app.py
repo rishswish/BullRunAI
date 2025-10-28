@@ -38,7 +38,7 @@ PROJECT_ID = os.environ.get("PROJECT_ID")
 # SnapTrade env config
 SNAPTRADE_CONSUMER_KEY = os.environ.get("SNAPTRADE_CONSUMER_KEY")
 SNAPTRADE_CLIENT_ID = os.environ.get("SNAPTRADE_CLIENT_ID")
-SNAPTRADE_REDIRECT_BASE = os.environ.get("SNAPTRADE_REDIRECT_BASE", "http://localhost:5173/portfolio")
+SNAPTRADE_REDIRECT_BASE = os.environ.get("SNAPTRADE_REDIRECT_BASE", "https://br-client-1085345446679.us-central1.run.app/portfolio")
 
 def get_snaptrade_client():
     if not SNAPTRADE_CONSUMER_KEY or not SNAPTRADE_CLIENT_ID:
@@ -460,16 +460,27 @@ def get_market_summary():
         print(f"[GET /api/market-summary] Request from user: {email}")
         client = get_firestore_client()
 
-        # Latest report by generated_at
-        query = (
-            client.collection('reports')
-            .order_by('generated_at', direction=firestore.Query.DESCENDING)
-            .limit(1)
-        )
-        docs = list(query.stream())
-        report = (docs[0].to_dict() if docs else {}) or {}
-        print(f"[GET /api/market-summary] Found report: {bool(report)}")
+        # First try to get personal report for the user
+        personal_reports_ref = client.collection('users').document(email).collection('reports')
+        personal_query = personal_reports_ref.order_by('generated_at', direction=firestore.Query.DESCENDING).limit(1)
+        personal_docs = list(personal_query.stream())
+        
+        if personal_docs:
+            # Use personal report
+            report = personal_docs[0].to_dict() or {}
+            print(f"[GET /api/market-summary] Found personal report for: {email}")
+        else:
+            # Fall back to global report
+            global_query = (
+                client.collection('reports')
+                .order_by('generated_at', direction=firestore.Query.DESCENDING)
+                .limit(1)
+            )
+            global_docs = list(global_query.stream())
+            report = (global_docs[0].to_dict() if global_docs else {}) or {}
+            print(f"[GET /api/market-summary] Using global report fallback for: {email}")
 
+        # Extract data from the report (personal or global)
         headline = (report.get('headline') or '').strip()
         headline_summary = (report.get('headline_summary') or report.get('summary') or '').strip()
 
@@ -1446,6 +1457,127 @@ def get_chart_timeframe():
     except Exception as e:
         print(f"[GET /api/chart/timeframe] ERROR: {e}")
         return jsonify({"error": "Failed to load timeframe"}), 500
+
+
+# Add these imports at the top with other imports
+from google import genai
+from google.genai import types
+
+# Add this after the existing environment variables
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+CHATBOT_MODEL = os.environ.get("CHATBOT_MODEL", "gemini-2.5-flash")
+
+# Add this function after the existing helper functions
+def get_google_genai_client():
+    """Initialize Google Gemini client for chatbot responses."""
+    if not GOOGLE_API_KEY:
+        raise RuntimeError("GOOGLE_API_KEY is required for chatbot functionality")
+    return genai.Client(api_key=GOOGLE_API_KEY)
+
+def is_financial_query(query: str) -> bool:
+    """Check if the query is related to financial topics."""
+    financial_keywords = [
+        'stock', 'stocks', 'market', 'markets', 'investment', 'investments', 'portfolio', 'trading', 'trade',
+        'financial', 'finance', 'economy', 'economic', 'earnings', 'revenue', 'profit', 'loss', 'dividend',
+        'bond', 'bonds', 'etf', 'etfs', 'mutual fund', 'mutual funds', 'crypto', 'cryptocurrency', 'bitcoin',
+        'forex', 'currency', 'dollar', 'euro', 'yen', 'pound', 'commodity', 'commodities', 'gold', 'silver',
+        'oil', 'gas', 'energy', 'sector', 'industry', 'company', 'companies', 'ipo', 'merger', 'acquisition',
+        'fed', 'federal reserve', 'interest rate', 'inflation', 'recession', 'bull market', 'bear market',
+        'volatility', 'risk', 'return', 'yield', 'price', 'valuation', 'analyst', 'recommendation', 'buy',
+        'sell', 'hold', 'outperform', 'underperform', 'target price', 'price target', 'analyst', 'research',
+        'equity', 'debt', 'balance sheet', 'income statement', 'cash flow', 'pe ratio', 'p/e', 'pb ratio',
+        'p/b', 'roe', 'roa', 'debt to equity', 'current ratio', 'quick ratio', 'working capital'
+    ]
+    
+    query_lower = query.lower()
+    return any(keyword in query_lower for keyword in financial_keywords)
+
+# Add this endpoint after the existing routes
+@app.route('/api/chatbot/query', methods=['POST'])
+@require_token
+def chatbot_query():
+    """Handle chatbot queries using Google Gemini API, restricted to financial topics."""
+    try:
+        email = request.user_email
+        payload = request.get_json() or {}
+        user_message = payload.get('message', '').strip()
+        
+        print(f"[POST /api/chatbot/query] Request from user: {email}, message: {user_message[:100]}...")
+        
+        if not user_message:
+            return jsonify({"error": "Message is required"}), 400
+        
+        # Check if query is financial-related
+        if not is_financial_query(user_message):
+            return jsonify({
+                "response": "I'm Spade, your investment assistant. I can only help with financial and investment-related questions. Please ask me about stocks, markets, portfolios, or other financial topics.",
+                "is_financial": False
+            }), 200
+        
+        # Initialize Gemini client
+        try:
+            client = get_google_genai_client()
+        except Exception as e:
+            print(f"[POST /api/chatbot/query] Failed to initialize Gemini client: {e}")
+            return jsonify({"error": "Chatbot service unavailable"}), 500
+        
+        # Create financial-focused prompt
+        financial_prompt = f"""
+You are Spade, a professional investment assistant. You help users with financial and investment-related questions.
+
+User Query: {user_message}
+
+Guidelines:
+- Provide accurate, helpful financial information
+- Be professional and educational in tone
+- If you don't have specific current data, say so and provide general guidance
+- Focus on investment education and market insights
+- Do not provide specific investment advice or recommendations
+- Keep responses concise but informative
+- If the query is not clearly financial, politely redirect to financial topics
+
+Respond as Spade, the investment assistant.
+"""
+        
+        try:
+            # Generate response using Gemini
+            config = types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=500,
+                top_p=0.8,
+                top_k=40
+            )
+            
+            response = client.models.generate_content(
+                model=CHATBOT_MODEL,
+                contents=financial_prompt,
+                config=config
+            )
+            
+            bot_response = getattr(response, "text", "").strip()
+            
+            if not bot_response:
+                bot_response = "I apologize, but I couldn't generate a response. Please try rephrasing your financial question."
+            
+            print(f"[POST /api/chatbot/query] Successfully generated response for: {email}")
+            
+            return jsonify({
+                "response": bot_response,
+                "is_financial": True,
+                "timestamp": datetime.utcnow().isoformat()
+            }), 200
+            
+        except Exception as e:
+            print(f"[POST /api/chatbot/query] Gemini API error: {e}")
+            return jsonify({
+                "response": "I'm experiencing technical difficulties. Please try again in a moment.",
+                "is_financial": True,
+                "error": "API error"
+            }), 200
+            
+    except Exception as e:
+        print(f"[POST /api/chatbot/query] ERROR: {e}")
+        return jsonify({"error": "Failed to process chatbot query"}), 500
 
 if __name__ == '__main__':
     print(f"[APP] Starting Flask server on host=0.0.0.0, port=5000, debug=True")

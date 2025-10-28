@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Search, Sun, Bell, Calendar, X, Menu, Landmark } from 'lucide-react';
-import bullrunLogo from '../assets/br.png';
+import spadeLogo from '../assets/br.png';
 
 function Navbar({ onLogout, user, theme, onThemeChange }) {
   const location = useLocation();
@@ -145,11 +145,11 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
     setSearchFocused(false);
     setMobileSearchOpen(false);
     setMobileNavOpen(false);
-    
+
     // Clear suggestions immediately
     setSuggestions([]);
     setActiveIndex(-1);
-    
+
     // Navigate to the ticker page
     const tickerPath = `/dashboard/${encodeURIComponent(s.ticker)}`;
     console.log('Navigating to:', tickerPath); // Debug log
@@ -188,7 +188,7 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
   return (
     <nav className="relative bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between sticky top-0 z-50">
       {/* Left side - Logo and Navigation */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-6">
         {/* Mobile: Hamburger */}
         <button
           type="button"
@@ -206,13 +206,13 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
         {/* Logo */}
         <Link to="/dashboard" className="flex items-center gap-1.5 cursor-pointer">
           <div className="w-5 h-5 rounded flex items-center justify-center">
-            <img src={bullrunLogo} alt="BullRun Logo" className="w-5 h-5" />
+            <img src={spadeLogo} alt="Spade Logo" className="w-5 h-5" />
           </div>
-          <span className="font-bold text-gray-900 text-base">BullRun</span>
+          <span className="font-bold text-gray-900 text-base">Spade</span>
         </Link>
 
         {/* Navigation Links - hidden on mobile */}
-        <div className="hidden md:flex items-center gap-0.5">
+        <div className="hidden md:flex items-center gap-3">
           <Link
             to="/dashboard"
             className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 cursor-pointer ${location.pathname === '/dashboard'
@@ -289,25 +289,24 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
                   className={`transition-all duration-150 ${showSuggestions ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}
                   style={{ transitionDelay: showSuggestions ? `${idx * 30}ms` : '0ms' }}
                 >
-<button
-  type="button"
-  onMouseEnter={() => setActiveIndex(idx)}
-  onMouseDown={(e) => {
-    e.preventDefault(); // prevents input blur
-    e.stopPropagation();
-    selectSuggestion(s);
-  }}
-  onTouchStart={(e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    selectSuggestion(s);
-  }}
-  className={`w-full px-3 py-2 text-left flex items-center gap-2 transition-colors ${
-    idx === activeIndex ? 'bg-gray-50' : 'bg-white'
-  } hover:bg-gray-50 cursor-pointer`}
->
+                  <button
+                    type="button"
+                    onMouseEnter={() => setActiveIndex(idx)}
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // prevents input blur
+                      e.stopPropagation();
+                      selectSuggestion(s);
+                    }}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      selectSuggestion(s);
+                    }}
+                    className={`w-full px-3 py-2 text-left flex items-center gap-2 transition-colors ${idx === activeIndex ? 'bg-gray-50' : 'bg-white'
+                      } hover:bg-gray-50 cursor-pointer`}
+                  >
 
-                                                            {/* Logo with black background */}
+                    {/* Logo with black background */}
                     <div className="w-8 h-8 bg-black rounded flex items-center justify-center flex-shrink-0">
                       {s.logo ? (
                         <img
@@ -337,23 +336,40 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
 
       {/* Right side - Actions */}
       <div className="flex items-center gap-2">
+        {/* Mobile: Dashboard icon */}
+        <Link
+          to="/dashboard"
+          className={`md:hidden p-1.5 rounded-md transition-all duration-200 cursor-pointer ${location.pathname === '/dashboard'
+            ? 'text-green-600 bg-green-50'
+            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          aria-label="Dashboard"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
+        </Link>
+
         {/* Mobile: Portfolio icon */}
         <Link
           to="/portfolio"
-          className={`md:hidden p-1.5 rounded-md transition-all duration-200 cursor-pointer ${
-            location.pathname === '/portfolio'
-              ? 'text-green-600 bg-green-50'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-          }`}
+          className={`md:hidden p-1.5 rounded-md transition-all duration-200 cursor-pointer ${location.pathname === '/portfolio'
+            ? 'text-green-600 bg-green-50'
+            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
           aria-label="Portfolio"
         >
           <Landmark className="w-5 h-5" />
         </Link>
 
         {/* Mobile: search toggle */}
+        {/* Mobile: search toggle */}
         <button
           type="button"
-          className="md:hidden p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all duration-200 cursor-pointer"
+          className={`md:hidden p-1.5 rounded-md transition-all duration-200 cursor-pointer ${mobileSearchOpen
+            ? 'text-green-600 bg-green-50'
+            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
           aria-label="Toggle search"
           aria-expanded={mobileSearchOpen}
           onClick={() => {
@@ -365,7 +381,7 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
         </button>
 
         {/* Theme toggle with animation */}
-        {/* <button
+        <button
           type="button"
           onClick={() => {
             const newTheme = theme === 'light' ? 'dark' : 'light';
@@ -375,9 +391,9 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
           title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
           ref={themeRef}
         >
-          
+
           <div className="relative w-4 h-4">
-            <Sun className={`w-4 h-4 absolute inset-0 transition-all duration-500 ${theme === 'light' ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 rotate-180 scale-50' }`} />
+            <Sun className={`w-4 h-4 absolute inset-0 transition-all duration-500 ${theme === 'light' ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 rotate-180 scale-50'}`} />
             <svg
               className={`w-4 h-4 absolute inset-0 transition-all duration-500 ${theme === 'dark'
                 ? 'opacity-100 rotate-0 scale-100'
@@ -396,7 +412,7 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
             </svg>
           </div>
           <span className="absolute inset-0 bg-green-400 opacity-0 group-active:opacity-20 transition-opacity duration-200 rounded-md" />
-        </button> */}
+        </button>
 
         {/* Pro button hidden on very small screens */}
         <button
@@ -565,10 +581,20 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
                       <button
                         type="button"
                         onMouseEnter={() => setActiveIndex(idx)}
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // prevents input blur
+                          e.stopPropagation();
+                          selectSuggestion(s);
+                        }}
+                        onTouchStart={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          selectSuggestion(s);
+                        }}
                         onClick={() => selectSuggestion(s)}
                         className={`w-full px-3 py-2 text-left flex items-center gap-2 transition-colors ${idx === activeIndex ? 'bg-gray-50' : 'bg-white'} hover:bg-gray-50 cursor-pointer`}
                       >
-                        <div className="w-8 h-8 bg-black rounded flex items-center justify-center flex-shrink-0">
+                                                <div className="w-8 h-8 bg-black rounded flex items-center justify-center flex-shrink-0">
                           {s.logo ? (
                             <img
                               src={s.logo}
@@ -605,9 +631,9 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center gap-1.5">
                 <div className="w-5 h-5 rounded flex items-center justify-center">
-                  <img src={bullrunLogo} alt="BullRun Logo" className="w-5 h-5" />
+                  <img src={spadeLogo} alt="Spade Logo" className="w-5 h-5" />
                 </div>
-                <span className="font-bold text-gray-900 text-base">BullRun</span>
+                <span className="font-bold text-gray-900 text-base">Spade</span>
               </div>
               <button
                 type="button"
@@ -665,7 +691,7 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
 
       {/* Backdrop overlay - transparent with shadow */}
       {mobileNavOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-transparent z-30 md:hidden"
           onClick={() => setMobileNavOpen(false)}
         />

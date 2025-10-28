@@ -8,7 +8,6 @@ import Onboarding from './pages/Onboarding';
 import Navbar from './components/Navbar';
 import Chatbot from './components/Chatbot';
 import Loading from './components/Loading';
-import './theme.css';
 import Ticker from './pages/Ticker';
 import './app.css';
 
@@ -86,7 +85,7 @@ function AppContent({ user, profile, checkingProfile, updateProfile, handleLogou
           </Routes>
         </div>
         {!isOnboarding && (
-          <Chatbot isOpen={isChatbotOpen} setIsOpen={setIsChatbotOpen} />
+          <Chatbot isOpen={isChatbotOpen} setIsOpen={setIsChatbotOpen} user={user}/>
         )}
       </div>
     </div>
@@ -110,17 +109,17 @@ function App() {
   const [checkingProfile, setCheckingProfile] = useState(false);
   const profileRequestedRef = useRef(false);
 
-  // Theme state
-  const [theme, setTheme] = useState(() => localStorage.getItem('br_theme') || 'light');
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('theme-dark');
-    } else {
-      root.classList.remove('theme-dark');
-    }
-    try { localStorage.setItem('br_theme', theme); } catch { }
-  }, [theme]);
+// Theme state - no localStorage, defaults to light on each session
+const [theme, setTheme] = useState('light');
+useEffect(() => {
+  const root = document.documentElement;
+  if (theme === 'dark') {
+    root.classList.add('theme-dark');
+  } else {
+    root.classList.remove('theme-dark');
+  }
+  // Removed localStorage.setItem - no persistence
+}, [theme]);
 
   useEffect(() => {
     const stored = localStorage.getItem('br_user');
