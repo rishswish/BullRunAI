@@ -411,11 +411,11 @@ def build_personal_composition_prompt(facts: Dict[str, Any], user_data: Dict[str
         portfolio_context = "No connected portfolio accounts."
     
     style_example = {
-      "headline": "Tech Stocks Lead Gains as AI Optimism Drives Microsoft and Nvidia Higher",
-      "headline_summary": "Technology stocks outperform as Microsoft gains 2.1% on AI infrastructure demand while Nvidia rises 3.4% on data center strength. Broader market advances with S&P 500 up 0.8% as investors focus on earnings season and Fed policy outlook.",
-      "key_movements": "Microsoft climbs 2.1% to $445.20 on strong Azure growth and AI adoption trends. Nvidia advances 3.4% to $875.50 as data center revenue exceeds expectations. S&P 500 gains 0.8% to 5,420 with technology sector leading. Tesla trades flat at $180.30 as EV demand concerns persist.",
-      "implications": "AI infrastructure spending continues to drive technology valuations higher, benefiting growth-oriented portfolios. Strong earnings from mega-cap tech names support broader market sentiment. Energy sector weakness suggests rotation into growth stocks as rates stabilize.",
-      "watch_points": "Microsoft earnings on Thursday will test AI revenue growth expectations and cloud margins. Fed Chair Powell's remarks Friday could impact rate-sensitive technology valuations. Tesla's delivery numbers next week will clarify EV demand trends and production capacity."
+      "headline": "Your Tech Holdings Lead Gains as AI Optimism Drives Microsoft and Nvidia Higher",
+      "headline_summary": "Your technology stocks outperform as Microsoft gains 2.1% on AI infrastructure demand while Nvidia rises 3.4% on data center strength. Broader market advances with S&P 500 up 0.8% as investors focus on earnings season and Fed policy outlook.",
+      "key_movements": "Your Microsoft position climbs 2.1% to $445.20 on strong Azure growth and AI adoption trends. Your Nvidia holding advances 3.4% to $875.50 as data center revenue exceeds expectations. S&P 500 gains 0.8% to 5,420 with technology sector leading. Tesla trades flat at $180.30 as EV demand concerns persist.",
+      "implications": "AI infrastructure spending continues to drive technology valuations higher, benefiting your growth-oriented portfolio. Strong earnings from mega-cap tech names support broader market sentiment. Energy sector weakness suggests rotation into growth stocks as rates stabilize.",
+      "watch_points": "Microsoft earnings on Thursday will test your AI revenue growth expectations and cloud margins. Fed Chair Powell's remarks Friday could impact your rate-sensitive technology valuations. Tesla's delivery numbers next week will clarify EV demand trends and production capacity."
     }
     
     facts_json = json.dumps(facts, ensure_ascii=False)
@@ -434,17 +434,18 @@ Facts (verbatim JSON):
 
 Hard requirements:
 - Present tense, professional tone appropriate for {experience} level.
-- Personal holdings-first focus; mention specific stocks from their portfolio/watchlist.
+- Write ALL sections in SECOND PERSON - address the user directly as "you" and "your".
+- Personal holdings-first focus; mention specific stocks from your portfolio/watchlist.
 - Output ONLY valid JSON with EXACT fields: headline, headline_summary, key_movements, implications, watch_points.
-- headline: ≤25 words; focus on what matters most to this investor.
-- headline_summary: 3-5 sentences; personalized news focusing on their holdings/interests.
+- headline: ≤25 words; focus on what matters most to you as an investor.
+- headline_summary: 3-5 sentences; personalized news focusing on your holdings/interests.
 - key_movements: 3-5 sentences covering:
-  1) Their top holdings with specific prices/changes if available
+  1) Your top holdings with specific prices/changes if available
   2) Broader market context (S&P 500, Dow, Nasdaq)
-  3) Any major movers relevant to their interests
+  3) Any major movers relevant to your interests
   If verified numbers are missing, write directional sentences without inventing numbers.
-- implications: 3-4 sentences; how market conditions affect their specific portfolio and investment goals.
-- watch_points: 3-4 sentences; personalized near-term catalysts relevant to their holdings and interests.
+- implications: 3-4 sentences; how market conditions affect your specific portfolio and investment goals.
+- watch_points: 3-4 sentences; personalized near-term catalysts relevant to your holdings and interests.
 - No bullet points; sentences only. No extra fields.
 
 Style guidance (format only, do not copy content):
@@ -502,6 +503,17 @@ def write_personal_report(db: firestore.Client, user_email: str, doc_id: str, pa
     reports_ref = user_ref.collection('reports').document(doc_id)
     reports_ref.set(payload, merge=True)
 
+def report_exists_for_date(db: firestore.Client, user_email: str, doc_id: str) -> bool:
+    """Check if a personal report already exists for the given user and date"""
+    try:
+        user_ref = db.collection('users').document(user_email.lower())
+        reports_ref = user_ref.collection('reports').document(doc_id)
+        doc = reports_ref.get()
+        return doc.exists
+    except Exception as e:
+        logger.error(f"Failed to check if report exists for {user_email} on {doc_id}: {e}")
+        return False
+
 def get_all_users(db: firestore.Client) -> List[Dict[str, Any]]:
     """Get all users from the database"""
     users = []
@@ -554,6 +566,11 @@ def run_personal_reports(dry_run: bool = False, model: str = MODEL, limit_users:
             # Skip users who haven't onboarded
             if not user.get("hasUserOnboarded", False):
                 logger.info(f"Skipping non-onboarded user: {user_email}")
+                continue
+            
+            # Check if report already exists for today
+            if report_exists_for_date(db, user_email, doc_id):
+                logger.info(f"Report already exists for {user_email} on {doc_id}, skipping generation")
                 continue
             
             # Get SnapTrade info
