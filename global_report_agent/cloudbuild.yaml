@@ -8,7 +8,7 @@ steps:
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br-global-agent:latest'
       - .
       - '-f'
-      - global_agent/Dockerfile
+      - global_report_agent/Dockerfile
 
   # Push the container image to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
@@ -21,4 +21,5 @@ images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/br/br-global-report-agent:latest'
 
 options:
+
   logging: CLOUD_LOGGING_ONLY
