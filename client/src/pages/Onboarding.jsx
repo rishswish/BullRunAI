@@ -185,7 +185,7 @@ function Onboarding({ user, onProfile }) {
               ) : (
                 <span className="text-gray-900 font-bold">BR</span>
               )}
-              <span className="font-sans text-2xl md:text-4xl font-bold text-gray-900 tracking-tight">Spade</span>
+              <span className="font-sans text-2xl md:text-4xl font-bold text-gray-900 tracking-tight">BullRun</span>
             </div>
 
             <div className="flex flex-col items-center text-center">

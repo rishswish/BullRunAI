@@ -938,8 +938,8 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
         {/* Disclaimer */}
         <div className="mt-6 px-3 py-3 text-[10px] text-gray-500 leading-relaxed">
           <p>
-            Spade, Inc. ("Spade") is in the process of applying for registration as an investment adviser with the U.S. Securities and Exchange Commission.
-            Until registration is effective Spade does not provide investment advisory services to the public and is not soliciting clients in any jurisdiction
+            BullRun, Inc. ("BullRun") is in the process of applying for registration as an investment adviser with the U.S. Securities and Exchange Commission.
+            Until registration is effective BullRun does not provide investment advisory services to the public and is not soliciting clients in any jurisdiction
             where such solicitation or provision of services would be unlawful prior to registration or notice filing. All information on this site is for
             informational purposes only and should not be construed as investment advice, an offer, or a solicitation to buy or sell any security.
           </p>

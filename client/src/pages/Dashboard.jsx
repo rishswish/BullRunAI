@@ -48,7 +48,7 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
     .map(b => `${b.symbol}:${b.key}:${b.label}`)
     .join(',');
 
-  const { data: marketData, isLoading: loading } = useQuery({
+  const { data: marketData, isLoading, isFetching } = useQuery({
     queryKey: ['market-summary', user?.token, benchmarksParam],
     enabled: !!user?.token,
     staleTime: Infinity,
@@ -71,7 +71,9 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
   const watchlistStocks = marketData?.watchlistStocks || [];
   const topMarketMovers = marketData?.topStocks || [];
 
-  if (loading) {
+  // Show loading during initial load or when refetching after data was cleared
+  const isDataCleared = marketData && !marketData.mainArticle?.title;
+  if (isLoading || (isFetching && isDataCleared)) {
     return <Loading message="Loading market data..." fullScreen={false} />;
   }
 
@@ -183,13 +185,10 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
   };
 
   const saveWatchlist = async () => {
-    if (!pending.length) {
-      setEditOpen(false);
-      return;
-    }
     setSaving(true);
     try {
-      await fetch(`${VITE_APP_API_URL}/api/user/watchlist`, {
+      const summaryKey = ['market-summary', user?.token, benchmarksParam];
+      const res = await fetch(`${VITE_APP_API_URL}/api/user/watchlist/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -198,19 +197,36 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
         body: JSON.stringify({ symbols: pending })
       });
 
-      // Force refetch by invalidating and refetching
-      await queryClient.invalidateQueries({
-        queryKey: ['market-summary', user?.token, benchmarksParam],
-        refetchType: 'active'
-      });
-
-      // Wait a bit for the refetch to complete
-      await queryClient.refetchQueries({
-        queryKey: ['market-summary', user?.token, benchmarksParam]
-      });
+      if (!res.ok) {
+        throw new Error('Failed to update watchlist');
+      }
 
       setEditOpen(false);
       setPending([]);
+
+      queryClient.setQueryData(summaryKey, (prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          mainArticle: { title: '', date: '', content: '' },
+          keyMovements: [],
+          implications: [],
+          watchPoints: [],
+          marketChart: {},
+          topStocks: [],
+          watchlistStocks: [],
+          news: [],
+        };
+      });
+
+      // Fire-and-forget invalidation so the modal can close immediately.
+      queryClient.invalidateQueries({
+        queryKey: summaryKey,
+        refetchType: 'active'
+      }).catch(() => {});
+      queryClient.refetchQueries({
+        queryKey: summaryKey
+      }).catch(() => {});
     } catch (_) {
       // no-op
     } finally {
@@ -296,7 +312,7 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
 
       // Generate filename with current date
       const date = new Date().toISOString().split('T')[0];
-      pdf.save(`Spade-Dashboard-${date}.pdf`);
+      pdf.save(`BullRun-Dashboard-${date}.pdf`);
 
       // Reset cursor
       document.body.style.cursor = originalCursor;
@@ -745,8 +761,8 @@ function Dashboard({ isChatbotOpen, setIsChatbotOpen, user, isMobile }) {
         {/* Disclaimer - Keep as is */}
         <div className="mt-6 px-3 py-3 text-[10px] text-gray-500 leading-relaxed">
           <p>
-            Spade, Inc. ("Spade") is in the process of applying for registration as an investment adviser with the U.S. Securities and Exchange Commission.
-            Until registration is effective Spade does not provide investment advisory services to the public and is not soliciting clients in any jurisdiction
+            BullRun, Inc. ("BullRun") is in the process of applying for registration as an investment adviser with the U.S. Securities and Exchange Commission.
+            Until registration is effective BullRun does not provide investment advisory services to the public and is not soliciting clients in any jurisdiction
             where such solicitation or provision of services would be unlawful prior to registration or notice filing. All information on this site is for
             informational purposes only and should not be construed as investment advice, an offer, or a solicitation to buy or sell any security.
           </p>

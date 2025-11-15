@@ -6,7 +6,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
   const [messages, setMessages] = useState([
     {
       type: 'bot',
-      text: 'Hi! I\'m Spade, your investment assistant. How can I help you today?',
+      text: 'Hi! I\'m **BullRun**, your investment assistant. I can help you understand your portfolio, analyze market conditions, and answer questions about your holdings. How can I help you today?',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -36,42 +36,58 @@ function Chatbot({ isOpen, setIsOpen, user }) {
     const currentMessage = message;
     setMessage('');
 
-    // Show loading indicator with spinner
+    const token = user?.token;
+    if (!token) {
+      // Handle not logged in
+      return;
+    }
+
+    // Show loading indicator
     const loadingMessage = {
+      id: Date.now(),
       type: 'bot',
-      text: 'Spade is thinking...',
+      text: 'BullRun is thinking...',
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isTyping: true
+      isTyping: true,
     };
     setMessages(prev => [...prev, loadingMessage]);
 
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+      const response = await fetch(`${API_BASE_URL}/api/chatbot/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ message: currentMessage })
+      });
 
-      // Remove loading indicator
-      setMessages(prev => prev.filter(msg => !msg.isTyping));
+      const data = await response.json();
 
-      // Return default response
-      const botResponse = {
-        type: 'bot',
-        text: 'Thank you for your message! I\'m currently in development mode. Your message has been received and I\'ll be able to provide more detailed responses soon.',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, botResponse]);
+      // Remove loading indicator and add final response
+      setMessages(prev => {
+        const newMessages = prev.filter(msg => !msg.isTyping);
+        newMessages.push({
+          type: 'bot',
+          text: data.response || "Sorry, something went wrong.",
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        return newMessages;
+      });
 
     } catch (error) {
       console.error('Chatbot error:', error);
-
-      // Remove loading indicator
-      setMessages(prev => prev.filter(msg => !msg.isTyping));
-
-      const errorResponse = {
-        type: 'bot',
-        text: 'Sorry, I\'m having trouble connecting. Please check your internet connection and try again.',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages(prev => [...prev, errorResponse]);
+      // Remove loading and show error
+       setMessages(prev => {
+        const newMessages = prev.filter(msg => !msg.isTyping);
+        newMessages.push({
+          type: 'bot',
+          text: "Sorry, I'm having trouble connecting.",
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        return newMessages;
+      });
     }
   };
 
@@ -79,7 +95,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
   const LoadingSpinner = () => (
     <div className="flex items-center gap-2">
       <Loader2 className="w-3 h-3 animate-spin text-green-600" />
-      <span className="text-xs text-gray-500">Spade is thinking...</span>
+      <span className="text-xs text-gray-500">BullRun is thinking...</span>
     </div>
   );
 
@@ -110,8 +126,8 @@ function Chatbot({ isOpen, setIsOpen, user }) {
                   <MessageSquare className="w-4 h-4 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="font-bold text-gray-900 text-xs">Chat with Spade</h3>
-                  <p className="text-[10px] text-gray-500 leading-tight">Discuss investments and manage your strategies</p>
+                  <h3 className="font-bold text-gray-900 text-xs">Chat with BullRun</h3>
+                  <p className="text-[10px] text-gray-500 leading-tight">Your AI investment assistant</p>
                 </div>
               </div>
               <div className="flex items-center gap-0.5">
@@ -137,7 +153,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
                       <div className="w-5 h-5 bg-green-600 rounded-full flex items-center justify-center">
                         <span className="text-white text-[8px] font-bold">BR</span>
                       </div>
-                      <span className="text-[10px] font-medium text-gray-700">Spade</span>
+                        <span className="text-[10px] font-medium text-gray-700">BullRun</span>
                     </div>
                   )}
                   <div className={`px-3 py-2 rounded-lg ${msg.type === 'user'
@@ -147,7 +163,15 @@ function Chatbot({ isOpen, setIsOpen, user }) {
                     {msg.isTyping ? (
                       <LoadingSpinner />
                     ) : (
-                      <p className="text-xs leading-relaxed">{msg.text}</p>
+                      <p className="text-xs leading-relaxed"
+                         dangerouslySetInnerHTML={{ 
+                            __html: msg.text
+                              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                              .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                              .replace(/`(.*?)`/g, '<code class="bg-gray-200 px-1 py-0.5 rounded text-xs">$1</code>')
+                              .replace(/\n/g, '<br />')
+                          }}
+                      />
                     )}
                   </div>
                   <p className="text-[9px] text-gray-400 mt-0.5 px-1">{msg.time}</p>
@@ -191,7 +215,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
                     <MessageSquare className="w-4 h-4 text-white" />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="font-bold text-gray-900 text-xs">Chat with Spade</h3>
+                    <h3 className="font-bold text-gray-900 text-xs">Chat with BullRun</h3>
                     <p className="text-[10px] text-gray-500 leading-tight">Discuss investments and manage your strategies</p>
                   </div>
                 </div>
@@ -218,7 +242,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
                         <div className="w-5 h-5 bg-green-600 rounded-full flex items-center justify-center">
                           <span className="text-white text-[8px] font-bold">BR</span>
                         </div>
-                        <span className="text-[10px] text-gray-700 font-medium">Spade</span>
+                        <span className="text-[10px] text-gray-700 font-medium">BullRun</span>
                       </div>
                     )}
                     <div className={`px-3 py-2 rounded-lg ${msg.type === 'user'
@@ -228,7 +252,15 @@ function Chatbot({ isOpen, setIsOpen, user }) {
                       {msg.isTyping ? (
                         <LoadingSpinner />
                       ) : (
-                        <p className="text-xs leading-relaxed">{msg.text}</p>
+                        <p className="text-xs leading-relaxed"
+                           dangerouslySetInnerHTML={{ 
+                            __html: msg.text
+                              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                              .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                              .replace(/`(.*?)`/g, '<code class="bg-gray-200 px-1 py-0.5 rounded text-xs">$1</code>')
+                              .replace(/\n/g, '<br />')
+                          }}
+                        />
                       )}
                     </div>
                     <p className="text-[9px] text-gray-400 mt-0.5 px-1">{msg.time}</p>

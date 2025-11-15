@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Search, Sun, Bell, Calendar, X, Menu, Landmark } from 'lucide-react';
-import spadeLogo from '../assets/br.png';
+import bullrunLogo from '../assets/br.png';
 
 function Navbar({ onLogout, user, theme, onThemeChange }) {
   const location = useLocation();
@@ -206,9 +206,9 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
         {/* Logo */}
         <Link to="/dashboard" className="flex items-center gap-1.5 cursor-pointer">
           <div className="w-5 h-5 rounded flex items-center justify-center">
-            <img src={spadeLogo} alt="Spade Logo" className="w-5 h-5" />
+            <img src={bullrunLogo} alt="BullRun Logo" className="w-5 h-5" />
           </div>
-          <span className="font-bold text-gray-900 text-base">Spade</span>
+          <span className="font-bold text-gray-900 text-base">BullRun</span>
         </Link>
 
         {/* Navigation Links - hidden on mobile */}
@@ -631,9 +631,9 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center gap-1.5">
                 <div className="w-5 h-5 rounded flex items-center justify-center">
-                  <img src={spadeLogo} alt="Spade Logo" className="w-5 h-5" />
+                  <img src={bullrunLogo} alt="BullRun Logo" className="w-5 h-5" />
                 </div>
-                <span className="font-bold text-gray-900 text-base">Spade</span>
+                <span className="font-bold text-gray-900 text-base">BullRun</span>
               </div>
               <button
                 type="button"

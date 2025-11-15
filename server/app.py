@@ -452,6 +452,60 @@ def add_to_watchlist():
         print(f"[POST /api/user/watchlist] ERROR: {e}")
         return jsonify({"error": "Failed to update watchlist"}), 500
 
+
+@app.route('/api/user/watchlist/update', methods=['POST'])
+@require_token
+def replace_watchlist():
+    """Replace the user's onboarding.watchlist with the provided list (deduped, uppercase)."""
+    try:
+        email = request.user_email
+        payload = request.get_json() or {}
+        symbols = payload.get('symbols')
+
+        if symbols is None:
+            symbols = []
+        if isinstance(symbols, str):
+            symbols = [symbols]
+        if not isinstance(symbols, list):
+            symbols = []
+
+        # sanitize, uppercase, preserve order, dedupe
+        sanitized = []
+        for x in symbols:
+            t = str(x or '').strip().upper()
+            if t and t not in sanitized:
+                sanitized.append(t)
+
+        client = get_firestore_client()
+        ref = _get_user_doc_ref(client, email)
+        snap = ref.get()
+        now = datetime.utcnow()
+
+        if not snap.exists:
+            print(f"[POST /api/user/watchlist/update] Creating new user shell for: {email}")
+            ref.set({
+                "email": email,
+                "name": (getattr(request, 'user_info', {}) or {}).get("name", ""),
+                "avatar": (getattr(request, 'user_info', {}) or {}).get("avatar", ""),
+                "hasUserOnboarded": False,
+                "onboarding": {"watchlist": sanitized},
+                "created_at": now,
+                "updated_at": now,
+            })
+        else:
+            doc = snap.to_dict() or {}
+            ob = doc.get("onboarding") or {}
+            print(f"[POST /api/user/watchlist/update] Replacing watchlist for: {email} with {sanitized}")
+            ref.update({
+                "onboarding": {**ob, "watchlist": sanitized},
+                "updated_at": now,
+            })
+
+        return jsonify({"watchlist": sanitized}), 200
+    except Exception as e:
+        print(f"[POST /api/user/watchlist/update] ERROR: {e}")
+        return jsonify({"error": "Failed to replace watchlist"}), 500
+
 @app.route('/api/market-summary', methods=['GET'])
 @require_token
 def get_market_summary():

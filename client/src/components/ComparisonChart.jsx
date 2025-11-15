@@ -38,7 +38,7 @@ function buildSmoothPathXY(points) {
 
 export default function ComparisonChart({ ticker, symbol, token, benchmarks = [], price, prevClose, change, changePct, logo, isMobile }) {
   console.log('isMobile', isMobile);
-  const [tf, setTf] = useState('1D');
+  const [tf, setTf] = useState('5D');
   const [visibleBenches, setVisibleBenches] = useState({ sp500: true, nasdaq: true, dow: true });
   const queryClient = useQueryClient();
   const VITE_APP_API_URL = import.meta.env.VITE_APP_API_URL;
