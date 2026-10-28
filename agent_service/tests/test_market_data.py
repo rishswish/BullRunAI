@@ -91,7 +91,9 @@ def test_manual_holdings_are_used_and_priced(monkeypatch):
     out = ds.get_portfolio("me@x.com", Settings(allow_demo_data=False, polygon_api_key="k"))
     pos = out["positions"][0]
     assert out["source"] == "manual" and out["cash"] == 500
-    assert pos["market_value"] == 1100.0 and pos["unrealized_pl_pct"] == 22.22 and pos["weight_pct"] == 100.0
+    assert pos["market_value"] == 1100.0 and pos["unrealized_pl_pct"] == 22.22
+    assert pos["weight_of_invested_pct"] == 100.0 and pos["weight_of_total_pct"] == 68.75
+    assert out["total_value"] == 1600.0
 
 
 class FakeResp:

@@ -346,15 +346,20 @@ def get_portfolio(email: str, settings: Settings | None = None) -> dict:
         if p.get("avgCost"):
             pos["unrealized_pl_pct"] = round(100 * (price - p["avgCost"]) / p["avgCost"], 2)
         positions.append(pos)
+    cash = float(holdings.get("totals", {}).get("totalBalance") or 0)
+    grand = total + cash
     for pos in positions:
-        pos["weight_pct"] = round(100 * pos["market_value"] / total, 2) if total else 0
+        pos["weight_of_invested_pct"] = round(100 * pos["market_value"] / total, 2) if total else 0
+        pos["weight_of_total_pct"] = round(100 * pos["market_value"] / grand, 2) if grand else 0
     positions.sort(key=lambda x: x["market_value"], reverse=True)
     return {
         "source": holdings.get("source", "snaptrade"),
+        "total_value": round(grand, 2),
         "total_invested": round(total, 2),
-        "cash": holdings.get("totals", {}).get("totalBalance"),
+        "cash": cash,
+        "cash_pct": round(100 * cash / grand, 2) if grand else 0,
         "positions": positions,
-        "concentration_top1_pct": positions[0]["weight_pct"] if positions else 0,
+        "largest_position_pct_of_total": positions[0]["weight_of_total_pct"] if positions else 0,
         "watchlist": user.get("watchlist", []),
         **({"note": "Positions in the simulated account are demo share counts priced at live market prices."}
            if demo else {}),
