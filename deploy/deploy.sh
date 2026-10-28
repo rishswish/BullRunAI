@@ -182,6 +182,9 @@ if ! gcloud artifacts repositories describe "$AR_REPO" --location="$REGION" >/de
   gcloud artifacts repositories create "$AR_REPO" --repository-format=docker --location="$REGION" --quiet
 fi
 IMG="$REGION-docker.pkg.dev/$PROJECT_ID/$AR_REPO"
+gcloud artifacts repositories set-cleanup-policies "$AR_REPO" --location="$REGION" --quiet \
+  --policy=<(printf '%s' '[{"name":"keep-latest-2","action":{"type":"Keep"},"mostRecentVersions":{"keepCount":2}},{"name":"delete-old","action":{"type":"Delete"},"condition":{"olderThan":"604800s"}}]') \
+  >/dev/null 2>&1 || warn "could not set image cleanup policy (optional)"
 
 # ---------------------------------------------------------------------------
 bold "5/9  Building container images with Cloud Build (~10-15 min the first time)"
@@ -221,7 +224,7 @@ info "br-mcp ..."
 gcloud run deploy br-mcp --image="$IMG/br-agent:latest" "${COMMON[@]}" \
   --command=python --args="-m,bullrun_agent.mcp_server,--http" \
   --set-env-vars="^;^EMBEDDING_PROVIDER=gemini;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index" \
-  --set-secrets="$MCP_SECRETS" --memory=1Gi --min-instances=0 --max-instances=3 \
+  --set-secrets="$MCP_SECRETS" --memory=1Gi --min-instances=0 --max-instances=2 \
   --allow-unauthenticated >/dev/null
 
 info "br-agent ..."
@@ -234,12 +237,12 @@ gcloud run deploy br-agent --image="$IMG/br-agent:latest" "${COMMON[@]}" \
 info "br-server ..."
 gcloud run deploy br-server --image="$IMG/br-server:latest" "${COMMON[@]}" \
   --set-env-vars="^;^PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;SNAPTRADE_REDIRECT_BASE=$CLIENT_URL/portfolio" \
-  --set-secrets="$SERVER_SECRETS" --memory=1Gi --timeout=300 --min-instances="$MIN_INSTANCES" \
+  --set-secrets="$SERVER_SECRETS" --memory=1Gi --timeout=300 --min-instances="$MIN_INSTANCES" --max-instances=2 \
   --allow-unauthenticated >/dev/null
 
 info "br-client ..."
 gcloud run deploy br-client --image="$IMG/br-client:latest" "${COMMON[@]}" \
-  --port=8080 --memory=512Mi --min-instances=0 --allow-unauthenticated >/dev/null
+  --port=8080 --memory=512Mi --min-instances=0 --max-instances=2 --allow-unauthenticated >/dev/null
 
 # Confirm the predicted URLs match what Cloud Run assigned.
 for svc in br-client br-server br-agent br-mcp; do
