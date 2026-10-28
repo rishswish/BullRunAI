@@ -867,6 +867,28 @@ def snaptrade_connect_url():
 # Manual holdings (for users without a linked brokerage) + end-of-day pricing
 # ---------------------------------------------------------------------------
 _EOD_CACHE = {}  # date -> (fetched_at, {ticker: bar})
+_QUOTE_CACHE = {}  # symbol -> (fetched_at, quote)
+
+
+def _finnhub_quote(sym):
+    """Real-time quote from Finnhub, cached 30s. Returns None if unavailable."""
+    key = os.environ.get("FINNHUB_API_KEY")
+    if not key:
+        return None
+    hit = _QUOTE_CACHE.get(sym)
+    if hit and time.time() - hit[0] < 30:
+        return hit[1]
+    try:
+        r = requests.get("https://finnhub.io/api/v1/quote", params={"symbol": sym, "token": key}, timeout=8)
+        r.raise_for_status()
+        q = r.json()
+    except Exception as e:
+        print(f"[finnhub] quote failed for {sym}: {e}")
+        return None
+    if not q.get("t"):  # unknown symbol comes back as all zeros
+        return None
+    _QUOTE_CACHE[sym] = (time.time(), q)
+    return q
 _TICKER_RE = re.compile(r"^[A-Z]{1,5}(\.[A-Z])?$")
 
 
@@ -923,13 +945,19 @@ def _manual_portfolio_summary(doc):
     try:
         as_of, cur, prev = _eod_quotes()
     except Exception as e:
-        print(f"[portfolio/manual] pricing failed: {e}")
+        print(f"[portfolio/manual] EOD pricing unavailable: {e}")
         as_of, cur, prev = None, {}, {}
     positions, total = [], 0.0
+    live = False
     for h in holdings:
         bar = cur.get(h["symbol"]) or {}
-        price = bar.get("c") or h.get("avgCost") or 0
-        prev_close = (prev.get(h["symbol"]) or {}).get("c")
+        q = _finnhub_quote(h["symbol"])
+        if q:
+            live = True
+            price, prev_close = q["c"], q.get("pc")
+        else:
+            price = bar.get("c") or h.get("avgCost") or 0
+            prev_close = (prev.get(h["symbol"]) or {}).get("c")
         mv = round(price * h["quantity"], 2)
         total += mv
         positions.append({
@@ -937,7 +965,7 @@ def _manual_portfolio_summary(doc):
             "quantity": h["quantity"], "price": price, "avgCost": h["avgCost"], "marketValue": mv,
             "dayChangePct": round(100 * (price - prev_close) / prev_close, 2) if prev_close else None,
             "unrealizedPlPct": round(100 * (price - h["avgCost"]) / h["avgCost"], 2) if h["avgCost"] else None,
-            "priced": bool(bar),
+            "priced": bool(q or bar),
         })
     grand = total or 1.0
     for pos in positions:
@@ -946,7 +974,8 @@ def _manual_portfolio_summary(doc):
     return {
         "hasConnectedAccounts": True,
         "source": "manual",
-        "asOf": as_of,
+        "asOf": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC") if live else as_of,
+        "live": live,
         "totals": {"totalBalance": round(cash, 2), "totalInvestments": round(total, 2)},
         "accounts": [{"id": "manual", "institution": "Manual holdings", "name": "Self-reported"}],
         "positions": positions,
@@ -1362,22 +1391,20 @@ def get_ticker_details(ticker: str):
         last_price = None
         prev_c = None
         day_vals = {"o": None, "h": None, "l": None, "c": None, "v": None, "vw": None}
-        try:
-            snap = _get(f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{sym}") or {}
-            t = snap.get("ticker") or {}
-            last_price = (t.get("lastTrade") or {}).get("p") or (t.get("day") or {}).get("c")
-            d = t.get("day") or {}
-            day_vals = {
-                "o": d.get("o"),
-                "h": d.get("h"),
-                "l": d.get("l"),
-                "c": d.get("c"),
-                "v": d.get("v"),
-                "vw": d.get("vw"),
-            }
-            prev_c = (t.get("prevDay") or {}).get("c")
-        except Exception as e:
-            print(f"[GET /api/ticker/<ticker>] Snapshot fetch failed for {sym}: {e}")
+        fq = _finnhub_quote(sym)
+        if fq:
+            last_price, prev_c = fq["c"], fq.get("pc")
+            day_vals = {"o": fq.get("o"), "h": fq.get("h"), "l": fq.get("l"), "c": fq["c"], "v": None, "vw": None}
+        else:
+            try:
+                snap = _get(f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{sym}") or {}
+                t = snap.get("ticker") or {}
+                last_price = (t.get("lastTrade") or {}).get("p") or (t.get("day") or {}).get("c")
+                d = t.get("day") or {}
+                day_vals = {k: d.get(k) for k in ("o", "h", "l", "c", "v", "vw")}
+                prev_c = (t.get("prevDay") or {}).get("c")
+            except Exception as e:
+                print(f"[GET /api/ticker/<ticker>] Snapshot fetch failed for {sym}: {e}")
 
         change = None
         change_percent = None

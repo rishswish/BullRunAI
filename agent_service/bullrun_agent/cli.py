@@ -63,9 +63,14 @@ async def main() -> None:
     tools = await load_tools(s.tools_mode, s.mcp_server_url)
     graph = build_graph(tools, InMemorySaver(), s)
     idx = get_index()
-    print(f"{BOLD}Spade{RESET} · {s.llm_provider}/{s.llm_model} · market data: "
-          f"{'polygon' if not s.demo_market else ('demo' if s.allow_demo_data else 'NOT CONFIGURED')} · filings: "
-          f"{', '.join(idx.tickers) if idx else 'not indexed yet'}")
+    if s.finnhub_api_key:
+        market = "finnhub (real-time)"
+    elif s.polygon_api_key:
+        market = "polygon (end-of-day)"
+    else:
+        market = "demo" if s.allow_demo_data else "NOT CONFIGURED"
+    filings = ", ".join(idx.tickers) if idx else "not indexed yet"
+    print(f"{BOLD}Spade{RESET} · {s.llm_provider}/{s.llm_model} · market data: {market} · filings: {filings}")
     cfg = {"configurable": {"thread_id": uuid.uuid4().hex, "user_email": "cli@bullrun.ai", "user_name": "you"}}
 
     if len(sys.argv) > 1:

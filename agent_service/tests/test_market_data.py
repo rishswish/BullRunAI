@@ -92,3 +92,39 @@ def test_manual_holdings_are_used_and_priced(monkeypatch):
     pos = out["positions"][0]
     assert out["source"] == "manual" and out["cash"] == 500
     assert pos["market_value"] == 1100.0 and pos["unrealized_pl_pct"] == 22.22 and pos["weight_pct"] == 100.0
+
+
+class FakeResp:
+    def __init__(self, data, status=200):
+        self._data, self.status_code = data, status
+
+    def json(self):
+        return self._data
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError("err", request=httpx.Request("GET", "http://x"),
+                                        response=httpx.Response(self.status_code))
+
+
+def test_finnhub_realtime_quote(monkeypatch):
+    q = {"c": 190.5, "o": 185, "h": 191, "l": 184.2, "pc": 185.0, "t": 1793300000}
+    monkeypatch.setattr(ds.httpx, "get", lambda *a, **k: FakeResp(q))
+    out = ds.get_quote("NVDA", Settings(finnhub_api_key="k", allow_demo_data=False))
+    assert out["source"] == "finnhub" and out["price"] == 190.5 and out["change_pct"] == 2.97
+    assert out["as_of"].endswith("ET")
+
+
+def test_finnhub_unknown_symbol(monkeypatch):
+    monkeypatch.setattr(ds.httpx, "get", lambda *a, **k: FakeResp({"c": 0, "t": 0}))
+    out = ds.get_quote("ZZZZ", Settings(finnhub_api_key="k", allow_demo_data=False))
+    assert "error" in out and "price" not in out
+
+
+def test_falls_back_to_polygon_when_finnhub_down(monkeypatch):
+    monkeypatch.setattr(ds.httpx, "get", lambda *a, **k: FakeResp({}, status=500))
+    d1 = date.today() - timedelta(days=1)
+    bar = {"NVDA": {"o": 1, "h": 2, "l": 1, "c": 2}}
+    monkeypatch.setattr(ds, "_polygon_get", fake_polygon([], {d1: bar, d1 - timedelta(days=1): bar}))
+    out = ds.get_quote("NVDA", Settings(finnhub_api_key="k", polygon_api_key="p", allow_demo_data=False))
+    assert out["source"] == "polygon" and out["price"] == 2

@@ -11,9 +11,10 @@ import json
 import logging
 import threading
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -62,6 +63,27 @@ class MarketDataUnavailable(Exception):
     pass
 
 
+ET = ZoneInfo("America/New_York")
+
+
+def _finnhub_quote(t: str, s: Settings) -> dict | None:
+    """Real-time quote. None = provider error (caller falls back); {} = unknown symbol."""
+    def fetch():
+        r = httpx.get("https://finnhub.io/api/v1/quote", params={"symbol": t, "token": s.finnhub_api_key}, timeout=8)
+        r.raise_for_status()
+        return r.json()
+    try:
+        q = _cached(f"fh:{t}", 30, fetch)
+    except httpx.HTTPError as e:
+        log.warning("finnhub quote failed for %s: %s", t, e)
+        return None
+    if not q.get("t"):
+        return {}
+    as_of = datetime.fromtimestamp(q["t"], tz=ET).strftime("%Y-%m-%d %H:%M ET")
+    return _shape_quote(t, {"name": t, "close": q["c"], "open": q["o"], "high": q["h"], "low": q["l"],
+                            "prev_close": q["pc"]}, source="finnhub", as_of=as_of)
+
+
 def _no_provider(t: str) -> dict:
     return {"ticker": t, "error": "Live market data is not configured (POLYGON_API_KEY missing).",
             "source": "none"}
@@ -101,6 +123,15 @@ def get_quote(ticker: str, settings: Settings | None = None) -> dict:
             return {"ticker": t, "error": f"No demo data for {t}. Demo tickers: {', '.join(demo_data()['quotes'])}",
                     "source": "demo"}
         return _shape_quote(t, q, source="demo")
+
+    if s.finnhub_api_key:
+        q = _finnhub_quote(t, s)
+        if q:
+            return q
+        if q == {}:
+            return {"ticker": t, "error": f"No quote for {t} (check the symbol).", "source": "finnhub"}
+        if not s.polygon_api_key:
+            return {"ticker": t, "error": "market data unavailable", "source": "finnhub"}
 
     try:
         day, cur_bars, prev_bars = _latest_two_sessions(s)
@@ -162,11 +193,32 @@ def get_news(ticker: str, limit: int = 5, settings: Settings | None = None) -> d
             })
         return {"ticker": t, "articles": arts, "source": "polygon"}
 
-    try:
-        return _cached(f"news:{t}:{limit}", 300, fetch)
-    except httpx.HTTPError as e:
-        log.warning("polygon news failed for %s: %s", t, e)
-        return {"ticker": t, "articles": [], "error": "news unavailable", "source": "polygon"}
+    if s.polygon_api_key:
+        try:
+            out = _cached(f"news:{t}:{limit}", 300, fetch)
+            if out["articles"] or not s.finnhub_api_key:
+                return out
+        except httpx.HTTPError as e:
+            log.warning("polygon news failed for %s: %s", t, e)
+    if s.finnhub_api_key:
+        try:
+            return _cached(f"fhnews:{t}:{limit}", 300, lambda: _finnhub_news(t, limit, s))
+        except httpx.HTTPError as e:
+            log.warning("finnhub news failed for %s: %s", t, e)
+    return {"ticker": t, "articles": [], "error": "news unavailable", "source": "none"}
+
+
+def _finnhub_news(t: str, limit: int, s: Settings) -> dict:
+    today = date.today()
+    r = httpx.get("https://finnhub.io/api/v1/company-news", timeout=8, params={
+        "symbol": t, "from": (today - timedelta(days=7)).isoformat(), "to": today.isoformat(),
+        "token": s.finnhub_api_key})
+    r.raise_for_status()
+    arts = [{"title": a.get("headline"), "publisher": a.get("source"),
+             "published_utc": datetime.fromtimestamp(a["datetime"], tz=timezone.utc).isoformat(),
+             "description": (a.get("summary") or "")[:400], "url": a.get("url")}
+            for a in r.json()[:limit] if a.get("datetime")]
+    return {"ticker": t, "articles": arts, "source": "finnhub"}
 
 
 # ---------------------------------------------------------------------------

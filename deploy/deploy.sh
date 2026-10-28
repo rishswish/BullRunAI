@@ -125,7 +125,8 @@ ensure_secret() {  # name, label, required(yes/no)
   info "$name: saved"; HAVE[$name]=1
 }
 ensure_secret google-api-key        "Gemini API key (required, aistudio.google.com/apikey)" yes
-ensure_secret polygon-api-key       "Polygon/Massive API key (required, real market data: massive.com)" yes
+ensure_secret finnhub-api-key       "Finnhub API key (required, real-time quotes: finnhub.io)" yes
+ensure_secret polygon-api-key       "Massive/Polygon API key (required, charts + history: massive.com)" yes
 ensure_secret snaptrade-consumer-key "SnapTrade consumer key (optional, brokerage linking)" no
 ensure_secret snaptrade-client-id   "SnapTrade client id (optional)" no
 ensure_secret langsmith-api-key     "LangSmith API key (optional, agent tracing)" no
@@ -138,10 +139,10 @@ secrets_flag() {  # pairs: ENV_NAME=secret-name ...
   done
   echo "$out"
 }
-AGENT_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key POLYGON_API_KEY=polygon-api-key \
+AGENT_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key \
   LANGSMITH_API_KEY=langsmith-api-key SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
-MCP_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key POLYGON_API_KEY=polygon-api-key)
-SERVER_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key POLYGON_API_KEY=polygon-api-key \
+MCP_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key)
+SERVER_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key \
   SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
 TRACING=false; [[ -n "${HAVE[langsmith-api-key]:-}" ]] && TRACING=true
 

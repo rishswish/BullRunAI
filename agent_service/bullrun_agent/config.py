@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
 
     # --- Data sources ------------------------------------------------------
+    finnhub_api_key: str | None = None
     polygon_api_key: str | None = None
     polygon_base_url: str = "https://api.polygon.io"
     # False in production: never fall back to bundled sample data; report "not configured" instead.
@@ -63,7 +64,7 @@ class Settings(BaseSettings):
 
     @property
     def demo_market(self) -> bool:
-        return not self.polygon_api_key
+        return not (self.finnhub_api_key or self.polygon_api_key)
 
     @property
     def demo_portfolio(self) -> bool:
