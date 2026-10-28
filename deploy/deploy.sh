@@ -212,7 +212,7 @@ COMMON=(--region="$REGION" --service-account="$SA_EMAIL" --quiet)
 # ---------------------------------------------------------------------------
 bold "6/9  Starting the SEC filings ingest job (runs in the background)"
 gcloud run jobs deploy br-rag-ingest --image="$IMG/br-agent:latest" "${COMMON[@]}" \
-  --command=python --args="-m,bullrun_agent.rag.ingest,--per-ticker,2,--upload,$INDEX_URI,--tickers,${RAG_TICKERS// /,}" \
+  --command=python --args="-m,bullrun_agent.rag.ingest,--per-ticker,1,--upload,$INDEX_URI,--tickers,${RAG_TICKERS// /,}" \
   --set-env-vars="^;^EMBEDDING_PROVIDER=gemini;SEC_USER_AGENT=BullRunAI $ACCOUNT;INDEX_DIR=/tmp/filings_index" \
   --set-secrets="GOOGLE_API_KEY=google-api-key:latest" \
   --memory=2Gi --cpu=1 --task-timeout=3600 --max-retries=1 >/dev/null

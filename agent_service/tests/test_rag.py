@@ -5,19 +5,36 @@ from bullrun_agent.rag.store import HybridIndex
 
 from .conftest import FAKE_10K
 
+FAKE_10Q = """
+PART I. FINANCIAL INFORMATION
+Item 1. Financial Statements
+Revenue was 100 and costs were 60 for the quarter, compared with 90 and 55 a year earlier in the period.
+Item 2. Management's Discussion and Analysis
+Data center demand drove growth this quarter while gaming was flat; we expect supply to improve next quarter.
+PART I. FINANCIAL INFORMATION
+Item 2. Management's Discussion and Analysis (continued)
+Operating expenses rose because of higher compensation and research spending across all product groups.
+Item 4. Controls and Procedures
+Our controls are effective and nothing changed during the quarter that would affect them materially here.
+PART II. OTHER INFORMATION
+Item 1A. Risk Factors
+There have been no material changes to the risk factors disclosed in our annual report filed earlier this year.
+Item 6. Exhibits
+Exhibit list follows with certifications and other required documents for the quarterly filing period.
+"""
+
 
 def test_sections_skip_table_of_contents():
     sections = dict(split_sections(FAKE_10K))
-    assert "1A" in sections and "foundries" in sections["1A"]
-    # The TOC line "Item 1A. Risk Factors" alone must not win over the real section.
-    assert len(sections["1A"]) > 200
+    assert "foundries" in sections["Risk Factors"]
+    assert len(sections["Risk Factors"]) > 200
 
 
 def test_chunks_carry_section_metadata(fake_index):
     sections = {c.meta["section"] for c in fake_index.chunks}
     assert {"Business", "Risk Factors", "Management's Discussion and Analysis"} <= sections
     assert all(c.text.startswith("[ACME 10-K") for c in fake_index.chunks)
-    assert not any(c.meta["item"] == "9" for c in fake_index.chunks), "boilerplate items are skipped"
+    assert not any("Accountants" in c.text for c in fake_index.chunks), "boilerplate items are skipped"
 
 
 def test_hybrid_search_finds_risk_passage(fake_index):
@@ -47,3 +64,12 @@ def test_tool_payload_has_citations(fake_index):
 
 def test_missing_index_message():
     assert "not built" in search_filings("anything")["error"]
+
+
+def test_10q_repeated_headers_keep_all_text_and_use_10q_names():
+    sections = dict(split_sections(FAKE_10Q, "10-Q"))
+    assert "Operating expenses" in sections["Management's Discussion and Analysis"]
+    assert "Data center demand" in sections["Management's Discussion and Analysis"]
+    assert "Risk Factors" in sections
+    assert "Controls and Procedures" not in " ".join(sections.values())
+    assert "Exhibit list" not in " ".join(sections.values())

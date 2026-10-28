@@ -92,7 +92,8 @@ class HybridIndex:
         vecs: list[list[float]] = []
         for i in range(0, len(chunks), batch):
             vecs.extend(embeddings.embed_documents([c.text for c in chunks[i:i + batch]]))
-            log.info("embedded %d/%d chunks", min(i + batch, len(chunks)), len(chunks))
+            if batch < len(chunks):
+                log.info("embedded %d/%d chunks", min(i + batch, len(chunks)), len(chunks))
         return cls(chunks, np.array(vecs, dtype=np.float32))
 
     def save(self, path: Path) -> None:

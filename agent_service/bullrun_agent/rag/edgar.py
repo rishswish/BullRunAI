@@ -8,13 +8,16 @@ from __future__ import annotations
 import logging
 import re
 import time
+import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 
 import httpx
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
 from ..config import get_settings
+
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)  # inline-XBRL filings
 
 log = logging.getLogger(__name__)
 
