@@ -1,0 +1,19 @@
+# Builds the React client with its API URLs baked in (Vite reads them at build time).
+# Used by deploy/deploy.sh:  gcloud builds submit client --config deploy/client-build.yaml --substitutions=...
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_IMAGE}
+      - --build-arg
+      - VITE_APP_API_URL=${_VITE_APP_API_URL}
+      - --build-arg
+      - VITE_APP_GOOGLE_CLIENT_ID=${_VITE_APP_GOOGLE_CLIENT_ID}
+      - --build-arg
+      - VITE_AGENT_API_URL=${_VITE_AGENT_API_URL}
+      - .
+images:
+  - ${_IMAGE}
+options:
+  logging: CLOUD_LOGGING_ONLY

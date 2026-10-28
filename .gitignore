@@ -30,3 +30,4 @@ dist-ssr/
 .ruff_cache/
 agent_service/evals/results/
 agent_service/data/filings_index/
+deploy/.deploy.env

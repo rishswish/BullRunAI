@@ -170,9 +170,12 @@ class FirestoreUserStore:
 
     def __init__(self, s: Settings):
         from google.cloud import firestore
-        from google.oauth2 import service_account
 
-        creds = service_account.Credentials.from_service_account_info(json.loads(s.firebase_service_account))
+        creds = None
+        if s.firebase_service_account:
+            from google.oauth2 import service_account
+
+            creds = service_account.Credentials.from_service_account_info(json.loads(s.firebase_service_account))
         self.db = firestore.Client(credentials=creds, project=s.project_id, database=s.firestore_database)
 
     def get_user(self, email: str) -> dict:

@@ -26,6 +26,7 @@ logger = logging.getLogger("global_report_two_step")
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 FIREBASE_SERVICE_ACCOUNT = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
 PROJECT_ID = os.environ.get("PROJECT_ID")
+FIRESTORE_DATABASE = os.environ.get("FIRESTORE_DATABASE", "br-prod-db")
 MODEL = os.environ.get("GLOBAL_REPORT_MODEL", "gemini-2.5-flash")
 
 if not GOOGLE_API_KEY:
@@ -36,13 +37,15 @@ client = genai.Client(api_key=GOOGLE_API_KEY)
 grounding_tool = types.Tool(google_search=types.GoogleSearch())
 
 def get_firestore_client():
-    if not FIREBASE_SERVICE_ACCOUNT or not PROJECT_ID:
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT and PROJECT_ID are required")
-    creds = service_account.Credentials.from_service_account_info(
-        json.loads(FIREBASE_SERVICE_ACCOUNT)
-    )
-    # Target 'br-prod-db' database
-    return firestore.Client(credentials=creds, project=PROJECT_ID, database="br-prod-db")
+    """Service-account JSON if provided, else Application Default Credentials (Cloud Run identity)."""
+    if not PROJECT_ID:
+        raise RuntimeError("PROJECT_ID is required")
+    if FIREBASE_SERVICE_ACCOUNT:
+        creds = service_account.Credentials.from_service_account_info(
+            json.loads(FIREBASE_SERVICE_ACCOUNT)
+        )
+        return firestore.Client(credentials=creds, project=PROJECT_ID, database=FIRESTORE_DATABASE)
+    return firestore.Client(project=PROJECT_ID, database=FIRESTORE_DATABASE)
 
 # ---------- Utils ----------
 def _extract_json(text: str) -> Dict[str, Any]:

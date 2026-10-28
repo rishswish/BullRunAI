@@ -65,7 +65,9 @@ class Settings(BaseSettings):
 
     @property
     def demo_portfolio(self) -> bool:
-        return not (self.firebase_service_account and self.project_id)
+        # Firestore is used whenever a project is configured; credentials come from
+        # FIREBASE_SERVICE_ACCOUNT or, on Cloud Run, the service's own identity.
+        return not self.project_id
 
 
 @lru_cache

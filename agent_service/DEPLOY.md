@@ -1,5 +1,25 @@
 # Deploying BullRun 2.0 to Google Cloud
 
+## Fastest path: one script in Cloud Shell (~25 min, mostly waiting)
+
+1. Make sure your GCP project has **billing linked** (free-trial credits work):
+   console.cloud.google.com/billing.
+2. Open **https://shell.cloud.google.com** (a browser terminal, already signed in) and run:
+   ```bash
+   git clone https://github.com/rishswish/BullRunAI.git && cd BullRunAI
+   gcloud config set project YOUR_PROJECT_ID
+   bash deploy/deploy.sh
+   ```
+3. The script walks you through creating the Google sign-in client, asks for your API keys
+   at hidden prompts (stored in Secret Manager), then builds and deploys everything:
+   client, Flask API, agent, MCP server, report jobs with schedules, and the SEC filings index.
+4. It prints the app URL at the end. On demo day, keep instances warm:
+   `MIN_INSTANCES=1 SKIP_BUILD=1 bash deploy/deploy.sh`.
+
+The rest of this file is the manual, step-by-step equivalent for the agent service.
+
+---
+
 Commands are for **Windows PowerShell** (use `\` instead of `` ` `` for line breaks on mac/linux).
 Budget: with `min-instances=0` and Gemini Flash, a demo deployment typically costs a few dollars a month.
 Set a billing budget alert anyway (Billing → Budgets & alerts).

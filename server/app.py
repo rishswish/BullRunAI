@@ -34,11 +34,12 @@ CORS(app)
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "YOUR_GOOGLE_CLIENT_ID")
 FIREBASE_SERVICE_ACCOUNT = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
 PROJECT_ID = os.environ.get("PROJECT_ID")
+FIRESTORE_DATABASE = os.environ.get("FIRESTORE_DATABASE", "br-prod-db")
 
 # SnapTrade env config
 SNAPTRADE_CONSUMER_KEY = os.environ.get("SNAPTRADE_CONSUMER_KEY")
 SNAPTRADE_CLIENT_ID = os.environ.get("SNAPTRADE_CLIENT_ID")
-SNAPTRADE_REDIRECT_BASE = os.environ.get("SNAPTRADE_REDIRECT_BASE", "https://br-client-1085345446679.us-central1.run.app/portfolio")
+SNAPTRADE_REDIRECT_BASE = os.environ.get("SNAPTRADE_REDIRECT_BASE", "http://localhost:5173/portfolio")
 
 def get_snaptrade_client():
     if not SNAPTRADE_CONSUMER_KEY or not SNAPTRADE_CLIENT_ID:
@@ -49,14 +50,16 @@ def get_snaptrade_client():
     )
 
 def get_firestore_client():
-    """Return Firestore client for database 'br-prod-db' using service account JSON from env."""
-    if not FIREBASE_SERVICE_ACCOUNT or not PROJECT_ID:
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT or PROJECT_ID env var not set")
-
-    credentials = service_account.Credentials.from_service_account_info(
-        json.loads(FIREBASE_SERVICE_ACCOUNT)
-    )
-    return firestore.Client(credentials=credentials, project=PROJECT_ID, database='br-prod-db')
+    """Firestore client. Uses FIREBASE_SERVICE_ACCOUNT JSON if set, otherwise the runtime's
+    own identity (Application Default Credentials, i.e. the Cloud Run service account)."""
+    if not PROJECT_ID:
+        raise RuntimeError("PROJECT_ID env var not set")
+    if FIREBASE_SERVICE_ACCOUNT:
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(FIREBASE_SERVICE_ACCOUNT)
+        )
+        return firestore.Client(credentials=credentials, project=PROJECT_ID, database=FIRESTORE_DATABASE)
+    return firestore.Client(project=PROJECT_ID, database=FIRESTORE_DATABASE)
 
 # Token verification decorator
 def require_token(f):

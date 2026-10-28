@@ -28,6 +28,7 @@ logger = logging.getLogger("personal_report_agent")
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 FIREBASE_SERVICE_ACCOUNT = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
 PROJECT_ID = os.environ.get("PROJECT_ID")
+FIRESTORE_DATABASE = os.environ.get("FIRESTORE_DATABASE", "br-prod-db")
 MODEL = os.environ.get("PERSONAL_REPORT_MODEL", "gemini-2.5-flash")
 POLYGON_API_KEY = os.environ.get("POLYGON_API_KEY")
 SNAPTRADE_CONSUMER_KEY = os.environ.get("SNAPTRADE_CONSUMER_KEY")
@@ -41,13 +42,15 @@ client = genai.Client(api_key=GOOGLE_API_KEY)
 grounding_tool = types.Tool(google_search=types.GoogleSearch())
 
 def get_firestore_client():
-    if not FIREBASE_SERVICE_ACCOUNT or not PROJECT_ID:
-        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT and PROJECT_ID are required")
-    creds = service_account.Credentials.from_service_account_info(
-        json.loads(FIREBASE_SERVICE_ACCOUNT)
-    )
-    # Target 'br-prod-db' database (same as global agent)
-    return firestore.Client(credentials=creds, project=PROJECT_ID, database="br-prod-db")
+    """Service-account JSON if provided, else Application Default Credentials (Cloud Run identity)."""
+    if not PROJECT_ID:
+        raise RuntimeError("PROJECT_ID is required")
+    if FIREBASE_SERVICE_ACCOUNT:
+        creds = service_account.Credentials.from_service_account_info(
+            json.loads(FIREBASE_SERVICE_ACCOUNT)
+        )
+        return firestore.Client(credentials=creds, project=PROJECT_ID, database=FIRESTORE_DATABASE)
+    return firestore.Client(project=PROJECT_ID, database=FIRESTORE_DATABASE)
 
 def get_snaptrade_client():
     if not SNAPTRADE_CONSUMER_KEY or not SNAPTRADE_CLIENT_ID:
