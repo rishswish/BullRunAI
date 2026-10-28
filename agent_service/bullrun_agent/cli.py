@@ -64,7 +64,7 @@ async def main() -> None:
     graph = build_graph(tools, InMemorySaver(), s)
     idx = get_index()
     print(f"{BOLD}Spade{RESET} · {s.llm_provider}/{s.llm_model} · market data: "
-          f"{'demo' if s.demo_market else 'polygon'} · filings: "
+          f"{'polygon' if not s.demo_market else ('demo' if s.allow_demo_data else 'NOT CONFIGURED')} · filings: "
           f"{', '.join(idx.tickers) if idx else 'not indexed yet'}")
     cfg = {"configurable": {"thread_id": uuid.uuid4().hex, "user_email": "cli@bullrun.ai", "user_name": "you"}}
 

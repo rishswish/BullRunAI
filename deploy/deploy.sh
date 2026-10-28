@@ -125,7 +125,7 @@ ensure_secret() {  # name, label, required(yes/no)
   info "$name: saved"; HAVE[$name]=1
 }
 ensure_secret google-api-key        "Gemini API key (required, aistudio.google.com/apikey)" yes
-ensure_secret polygon-api-key       "Polygon.io API key (recommended, live prices + ticker pages)" no
+ensure_secret polygon-api-key       "Polygon/Massive API key (required, real market data: massive.com)" yes
 ensure_secret snaptrade-consumer-key "SnapTrade consumer key (optional, brokerage linking)" no
 ensure_secret snaptrade-client-id   "SnapTrade client id (optional)" no
 ensure_secret langsmith-api-key     "LangSmith API key (optional, agent tracing)" no
@@ -223,14 +223,14 @@ bold "7/9  Deploying services"
 info "br-mcp ..."
 gcloud run deploy br-mcp --image="$IMG/br-agent:latest" "${COMMON[@]}" \
   --command=python --args="-m,bullrun_agent.mcp_server,--http" \
-  --set-env-vars="^;^EMBEDDING_PROVIDER=gemini;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index" \
+  --set-env-vars="^;^ALLOW_DEMO_DATA=false;EMBEDDING_PROVIDER=gemini;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index" \
   --set-secrets="$MCP_SECRETS" --memory=1Gi --min-instances=0 --max-instances=2 \
   --allow-unauthenticated >/dev/null
 
 info "br-agent ..."
 # max-instances=1 because chat memory is in-process; set CHECKPOINT_DB_URL (Postgres) to scale out.
 gcloud run deploy br-agent --image="$IMG/br-agent:latest" "${COMMON[@]}" \
-  --set-env-vars="^;^LLM_PROVIDER=gemini;LLM_MODEL=$LLM_MODEL;ROUTER_MODEL=$ROUTER_MODEL;EMBEDDING_PROVIDER=gemini;TOOLS_MODE=mcp;MCP_SERVER_URL=$MCP_URL/mcp;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;CORS_ORIGINS=$CLIENT_URL,http://localhost:5173;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;LANGSMITH_TRACING=$TRACING;LANGSMITH_PROJECT=bullrun-agent" \
+  --set-env-vars="^;^ALLOW_DEMO_DATA=false;LLM_PROVIDER=gemini;LLM_MODEL=$LLM_MODEL;ROUTER_MODEL=$ROUTER_MODEL;EMBEDDING_PROVIDER=gemini;TOOLS_MODE=mcp;MCP_SERVER_URL=$MCP_URL/mcp;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;CORS_ORIGINS=$CLIENT_URL,http://localhost:5173;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;LANGSMITH_TRACING=$TRACING;LANGSMITH_PROJECT=bullrun-agent" \
   --set-secrets="$AGENT_SECRETS" --memory=1Gi --cpu=1 --timeout=300 --concurrency=40 \
   --min-instances="$MIN_INSTANCES" --max-instances=1 --cpu-boost --allow-unauthenticated >/dev/null
 

@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     # --- Data sources ------------------------------------------------------
     polygon_api_key: str | None = None
     polygon_base_url: str = "https://api.polygon.io"
+    # False in production: never fall back to bundled sample data; report "not configured" instead.
+    allow_demo_data: bool = True
     sec_user_agent: str = "BullRunAI research-bot contact@example.com"
 
     # Firestore (same env vars the existing Flask server uses)
