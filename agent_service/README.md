@@ -68,6 +68,7 @@ copy .env.example .env                                  # then set GOOGLE_API_KE
 python -m pytest -q                                     # 14 offline tests, no keys needed
 python -m bullrun_agent.rag.ingest --tickers NVDA AAPL MSFT TSLA   # build filings index (~2-5 min)
 uvicorn bullrun_agent.api:app --reload --port 8080      # agent API
+python -m bullrun_agent.cli                             # chat with Spade in the terminal
 ```
 
 Then in `client/.env` add `VITE_AGENT_API_URL=http://localhost:8080` and run `npm run dev`.
