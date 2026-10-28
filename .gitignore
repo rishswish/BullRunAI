@@ -31,3 +31,4 @@ dist-ssr/
 agent_service/evals/results/
 agent_service/data/filings_index/
 deploy/.deploy.env
+agent_service/data/local_user.json

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Wallet, TrendingUp, BarChart2, PieChart as PieIcon, RefreshCw, Trophy, Building2, Plus, Eye, EyeOff, X, Landmark } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import Loading from '../components/Loading';
+import ManualHoldingsModal from '../components/ManualHoldingsModal';
 import { useNavigate } from 'react-router-dom';
 
 // Demo dataset (brokers, balances, holdings, transactions)
@@ -73,6 +74,8 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
   const [loginUrl, setLoginUrl] = useState('');
 
   const [awaitingCompletion, setAwaitingCompletion] = useState(false);
+  const [connectNotice, setConnectNotice] = useState('');
+  const [manualOpen, setManualOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Demo mode (eye)
@@ -106,6 +109,7 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
     setSelectedBroker('');
     setLoginUrl('');
     setAwaitingCompletion(false);
+    setConnectNotice('');
     setConnectOpen(true);
   };
 
@@ -139,6 +143,10 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
         headers: { Authorization: `Bearer ${user.token}` },
       });
       const data = await res.json();
+      if (!res.ok && data?.error === 'not_configured') {
+        setConnectNotice(data.message || 'Brokerage linking is not configured on this deployment.');
+        return;
+      }
       const url = typeof data?.url === 'string' ? data.url : (data?.url?.redirectURI || data?.url?.redirectUri || '');
       setLoginUrl(url || '');
       if (url && url.startsWith('http')) {
@@ -366,29 +374,19 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
             )}
           </div>
           <button
-            onClick={() => {
-              if (demoMode) {
-                setDemoMode(false);
-                setDemoPortfolio(null);
-                // Restore to all real accounts
-                if (Array.isArray(portfolio?.accounts)) {
-                  setSelectedAccountIds(portfolio.accounts.map(a => a.id));
-                }
-              } else {
-                const demo = generateDemoPortfolio();
-                setDemoPortfolio(demo);
-                setDemoMode(true);
-                // Select all demo accounts
-                setSelectedAccountIds(DEMO_ACCOUNTS.map(a => a.id));
-              }
-            }}
-
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors cursor-pointer"
-            title={demoMode ? 'Exit demo mode' : 'Enter demo mode'}
+            onClick={() => setManualOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-green-700 bg-white border border-green-600 rounded-lg hover:bg-green-50 transition-colors cursor-pointer"
           >
-            Demo
+            Manage holdings
           </button>
         </div>
+
+        <ManualHoldingsModal open={manualOpen} onClose={() => setManualOpen(false)} onSaved={refreshPortfolio} user={user} />
+        {p?.source === 'manual' && (
+          <p className="text-[11px] text-gray-500 mb-3 md:text-right">
+            Self-reported holdings{p?.asOf ? ` · priced at ${p.asOf} close` : ''}
+          </p>
+        )}
 
         {connectOpen && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[1000]">
@@ -418,6 +416,16 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                   </>
                 ) : !awaitingCompletion ? (
                   <>
+                    {connectNotice && (
+                      <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
+                        <p className="font-semibold mb-1">SnapTrade linking is available, not enabled here</p>
+                        <p className="mb-2">{connectNotice} You can enter your positions manually instead; prices and analysis work the same.</p>
+                        <button onClick={() => { setConnectOpen(false); setManualOpen(true); }}
+                          className="px-2 py-1 rounded bg-green-600 text-white font-semibold hover:bg-green-700 cursor-pointer">
+                          Enter holdings manually
+                        </button>
+                      </div>
+                    )}
                     <p className="text-xs text-gray-600 mb-3">Select your brokerage to open SnapTrade in a new tab.</p>
                     <div className="grid grid-cols-2 gap-2 mb-3">
                       {[

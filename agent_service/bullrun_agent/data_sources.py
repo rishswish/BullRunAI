@@ -17,7 +17,7 @@ from typing import Any, Protocol
 
 import httpx
 
-from .config import PACKAGE_DIR, Settings, get_settings
+from .config import PACKAGE_DIR, SERVICE_DIR, Settings, get_settings
 
 log = logging.getLogger(__name__)
 
@@ -178,16 +178,27 @@ class UserStore(Protocol):
 
 
 class DemoUserStore:
-    """In-memory store seeded from demo_data.json (per-process, resets on restart)."""
+    """Local, in-memory user store (no Firestore). Seeded from data/local_user.json when present,
+    so you can test with your own holdings locally:
+        {"watchlist": ["NVDA"], "manual_holdings": [{"symbol": "NVDA", "quantity": 10, "avgCost": 120}],
+         "manual_cash": 1000}"""
 
     def __init__(self):
         self._users: dict[str, dict] = {}
         self._lock = threading.Lock()
 
+    @staticmethod
+    def _seed() -> dict:
+        local = SERVICE_DIR / "data" / "local_user.json"
+        if local.exists():
+            return json.loads(local.read_text())
+        return {"watchlist": list(demo_data()["watchlist"])} if get_settings().allow_demo_data else {"watchlist": []}
+
     def get_user(self, email: str) -> dict:
         with self._lock:
-            seed = list(demo_data()["watchlist"]) if get_settings().allow_demo_data else []
-            return self._users.setdefault(email, {"email": email, "watchlist": seed})
+            if email not in self._users:
+                self._users[email] = {"email": email, **self._seed()}
+            return self._users[email]
 
     def set_watchlist(self, email: str, tickers: list[str]) -> list[str]:
         user = self.get_user(email)
@@ -209,12 +220,19 @@ class FirestoreUserStore:
             creds = service_account.Credentials.from_service_account_info(json.loads(s.firebase_service_account))
         self.db = firestore.Client(credentials=creds, project=s.project_id, database=s.firestore_database)
 
+    @staticmethod
+    def _key(email: str) -> str:
+        return email.strip().lower()  # the Flask API keys user docs by lowercase email
+
     def get_user(self, email: str) -> dict:
-        snap = self.db.collection("users").document(email).get()
-        return snap.to_dict() or {"email": email, "watchlist": []}
+        doc = self.db.collection("users").document(self._key(email)).get().to_dict() or {"email": email}
+        # The app keeps the watchlist at onboarding.watchlist; expose it at the top level for the tools.
+        doc["watchlist"] = (doc.get("onboarding") or {}).get("watchlist") or []
+        return doc
 
     def set_watchlist(self, email: str, tickers: list[str]) -> list[str]:
-        self.db.collection("users").document(email).set({"watchlist": tickers}, merge=True)
+        # merge=True deep-merges maps, so other onboarding answers are preserved.
+        self.db.collection("users").document(self._key(email)).set({"onboarding": {"watchlist": tickers}}, merge=True)
         return tickers
 
 
@@ -235,6 +253,11 @@ def get_portfolio(email: str, settings: Settings | None = None) -> dict:
     holdings = None
     if user.get("snaptrade_user_id") and user.get("snaptrade_user_secret"):
         holdings = _snaptrade_positions(user["snaptrade_user_id"], user["snaptrade_user_secret"])
+    if holdings is None and user.get("manual_holdings"):
+        # Self-reported positions entered on the Portfolio page (same Firestore field the Flask API writes).
+        holdings = {"source": "manual", "totals": {"totalBalance": user.get("manual_cash")},
+                    "positions": [{"symbol": h["symbol"], "name": h["symbol"], "quantity": h["quantity"],
+                                   "avgCost": h.get("avgCost")} for h in user["manual_holdings"]]}
     if holdings is None:
         if not s.allow_demo_data:
             return {"source": "none", "positions": [], "total_invested": 0,

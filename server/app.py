@@ -822,6 +822,9 @@ def health_check():
 @require_token
 def snaptrade_connect_url():
     """Create a SnapTrade Connection Portal URL for the current user."""
+    if not SNAPTRADE_CONSUMER_KEY or not SNAPTRADE_CLIENT_ID:
+        return jsonify({"error": "not_configured",
+                        "message": "Brokerage linking (SnapTrade) is built in but not configured on this deployment."}), 503
     try:
         email = request.user_email
         broker = request.args.get('broker')
@@ -859,6 +862,124 @@ def snaptrade_connect_url():
         print(f"[GET /api/snaptrade/connect_url] ERROR: {e}")
         return jsonify({"error": "Failed to create connect URL"}), 500
 
+
+# ---------------------------------------------------------------------------
+# Manual holdings (for users without a linked brokerage) + end-of-day pricing
+# ---------------------------------------------------------------------------
+_EOD_CACHE = {}  # date -> (fetched_at, {ticker: bar})
+_TICKER_RE = re.compile(r"^[A-Z]{1,5}(\.[A-Z])?$")
+
+
+def _grouped_bars(day_str):
+    """All US stock bars for one day in a single Polygon call (free plan: 5 req/min). Cached 1h."""
+    hit = _EOD_CACHE.get(day_str)
+    if hit and time.time() - hit[0] < 3600:
+        return hit[1]
+    api_key = os.environ.get("POLYGON_API_KEY")
+    if not api_key:
+        raise RuntimeError("POLYGON_API_KEY not set")
+    r = requests.get(f"https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{day_str}",
+                     params={"adjusted": "true", "apiKey": api_key}, timeout=20)
+    r.raise_for_status()
+    bars = {b["T"]: b for b in (r.json().get("results") or [])}
+    _EOD_CACHE[day_str] = (time.time(), bars)
+    return bars
+
+
+def _eod_quotes():
+    """Return (as_of_date, latest_bars, previous_bars) for the two most recent sessions."""
+    from datetime import date, timedelta
+    found = []
+    d = date.today()
+    for _ in range(10):
+        bars = _grouped_bars(d.isoformat())
+        if bars:
+            found.append((d.isoformat(), bars))
+            if len(found) == 2:
+                return found[0][0], found[0][1], found[1][1]
+        d -= timedelta(days=1)
+    raise RuntimeError("no recent sessions from Polygon")
+
+
+def _clean_holdings(raw):
+    out = []
+    for h in raw or []:
+        sym = str(h.get("symbol", "")).upper().strip().lstrip("$")
+        try:
+            qty = float(h.get("quantity"))
+            cost = float(h["avgCost"]) if h.get("avgCost") not in (None, "") else None
+        except (TypeError, ValueError):
+            continue
+        if _TICKER_RE.match(sym) and qty > 0:
+            out.append({"symbol": sym, "quantity": qty, "avgCost": cost})
+    return out[:50]
+
+
+def _manual_portfolio_summary(doc):
+    holdings = _clean_holdings(doc.get("manual_holdings"))
+    cash = float(doc.get("manual_cash") or 0)
+    if not holdings and not cash:
+        return None
+    try:
+        as_of, cur, prev = _eod_quotes()
+    except Exception as e:
+        print(f"[portfolio/manual] pricing failed: {e}")
+        as_of, cur, prev = None, {}, {}
+    positions, total = [], 0.0
+    for h in holdings:
+        bar = cur.get(h["symbol"]) or {}
+        price = bar.get("c") or h.get("avgCost") or 0
+        prev_close = (prev.get(h["symbol"]) or {}).get("c")
+        mv = round(price * h["quantity"], 2)
+        total += mv
+        positions.append({
+            "accountId": "manual", "symbol": h["symbol"], "name": h["symbol"],
+            "quantity": h["quantity"], "price": price, "avgCost": h["avgCost"], "marketValue": mv,
+            "dayChangePct": round(100 * (price - prev_close) / prev_close, 2) if prev_close else None,
+            "unrealizedPlPct": round(100 * (price - h["avgCost"]) / h["avgCost"], 2) if h["avgCost"] else None,
+            "priced": bool(bar),
+        })
+    grand = total or 1.0
+    for pos in positions:
+        pos["weight"] = round(100.0 * pos["marketValue"] / grand, 2)
+    positions.sort(key=lambda x: x["marketValue"], reverse=True)
+    return {
+        "hasConnectedAccounts": True,
+        "source": "manual",
+        "asOf": as_of,
+        "totals": {"totalBalance": round(cash, 2), "totalInvestments": round(total, 2)},
+        "accounts": [{"id": "manual", "institution": "Manual holdings", "name": "Self-reported"}],
+        "positions": positions,
+        "topHoldings": positions,
+        "balances": [{"accountId": "manual", "amount": round(cash, 2)}],
+        "orders": [],
+    }
+
+
+@app.route('/api/portfolio/manual', methods=['GET'])
+@require_token
+def get_manual_holdings():
+    client = get_firestore_client()
+    doc = _get_user_doc_ref(client, request.user_email).get().to_dict() or {}
+    return jsonify({"holdings": _clean_holdings(doc.get("manual_holdings")),
+                    "cash": float(doc.get("manual_cash") or 0)}), 200
+
+
+@app.route('/api/portfolio/manual', methods=['PUT'])
+@require_token
+def save_manual_holdings():
+    payload = request.get_json() or {}
+    holdings = _clean_holdings(payload.get("holdings"))
+    try:
+        cash = max(0.0, float(payload.get("cash") or 0))
+    except (TypeError, ValueError):
+        cash = 0.0
+    client = get_firestore_client()
+    _get_user_doc_ref(client, request.user_email).set(
+        {"manual_holdings": holdings, "manual_cash": cash, "updated_at": datetime.utcnow().isoformat()}, merge=True)
+    return jsonify({"holdings": holdings, "cash": cash}), 200
+
+
 @app.route('/api/portfolio/summary', methods=['GET'])
 @require_token
 def portfolio_summary():
@@ -871,6 +992,9 @@ def portfolio_summary():
         doc = ref.get().to_dict() or {}
         st = _get_snaptrade_info(doc)
         if not st:
+            manual = _manual_portfolio_summary(doc)
+            if manual:
+                return jsonify(manual), 200
             print(f"[GET /api/portfolio/summary] No SnapTrade info found for: {email}")
             return jsonify({
                 "hasConnectedAccounts": False,

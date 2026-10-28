@@ -579,8 +579,19 @@ def run_personal_reports(dry_run: bool = False, model: str = MODEL, limit_users:
             # Get SnapTrade info
             snaptrade_info = _get_snaptrade_info(user)
             
-            # Fetch portfolio data
-            portfolio_data = get_portfolio_data(user_email, snaptrade_info)
+            # Fetch portfolio data (linked brokerage, else holdings the user entered manually)
+            if snaptrade_info:
+                portfolio_data = get_portfolio_data(user_email, snaptrade_info)
+            else:
+                manual = [h for h in (user.get("manual_holdings") or []) if h.get("symbol")]
+                portfolio_data = {
+                    "hasConnectedAccounts": bool(manual),
+                    "source": "manual",
+                    "totals": {"totalBalance": float(user.get("manual_cash") or 0), "totalInvestments": 0.0},
+                    "positions": [{"symbol": h["symbol"], "name": h["symbol"], "quantity": h.get("quantity"),
+                                   "avgCost": h.get("avgCost")} for h in manual],
+                    "topHoldings": [],
+                }
             
             # Fetch watchlist data
             watchlist = user.get("onboarding", {}).get("watchlist", [])

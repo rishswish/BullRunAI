@@ -79,3 +79,16 @@ def test_strict_mode_portfolio_without_broker_is_empty(monkeypatch):
     out = ds.get_portfolio("nobody@example.com", Settings(allow_demo_data=False))
     assert out["positions"] == [] and out["source"] == "none" and "brokerage" in out["note"]
     ds.get_user_store.cache_clear()
+
+
+def test_manual_holdings_are_used_and_priced(monkeypatch):
+    class Store:
+        def get_user(self, email):
+            return {"watchlist": [], "manual_holdings": [{"symbol": "NVDA", "quantity": 10, "avgCost": 90}],
+                    "manual_cash": 500}
+    monkeypatch.setattr(ds, "get_user_store", lambda: Store())
+    monkeypatch.setattr(ds, "get_quote", lambda t, s=None: {"ticker": t, "price": 110.0, "change_pct": 1.5})
+    out = ds.get_portfolio("me@x.com", Settings(allow_demo_data=False, polygon_api_key="k"))
+    pos = out["positions"][0]
+    assert out["source"] == "manual" and out["cash"] == 500
+    assert pos["market_value"] == 1100.0 and pos["unrealized_pl_pct"] == 22.22 and pos["weight_pct"] == 100.0
