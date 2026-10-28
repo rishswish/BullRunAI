@@ -128,3 +128,16 @@ def test_falls_back_to_polygon_when_finnhub_down(monkeypatch):
     monkeypatch.setattr(ds, "_polygon_get", fake_polygon([], {d1: bar, d1 - timedelta(days=1): bar}))
     out = ds.get_quote("NVDA", Settings(finnhub_api_key="k", polygon_api_key="p", allow_demo_data=False))
     assert out["source"] == "polygon" and out["price"] == 2
+
+
+def test_demo_brokerage_is_labelled(monkeypatch):
+    class Store:
+        def get_user(self, email):
+            return {"watchlist": [], "manual_holdings": [{"symbol": "NVDA", "quantity": 1, "avgCost": 100}],
+                    "demo_brokerage": {"institution": "Robinhood"}}
+    monkeypatch.setattr(ds, "get_user_store", lambda: Store())
+    monkeypatch.setattr(ds, "get_quote", lambda t, s=None: {"ticker": t, "price": 100.0, "change_pct": 0})
+    out = ds.get_portfolio("me@x.com", Settings(allow_demo_data=False, finnhub_api_key="k"))
+    accounts = {p["account"] for p in out["positions"]}
+    assert accounts == {"manual", "Robinhood (simulated demo account)"}
+    assert "simulated" in out["note"]

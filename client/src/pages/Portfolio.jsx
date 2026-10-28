@@ -76,6 +76,28 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
   const [awaitingCompletion, setAwaitingCompletion] = useState(false);
   const [connectNotice, setConnectNotice] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
+
+  const demoConnect = async (broker) => {
+    setDemoBusy(true);
+    try {
+      await fetch(`${VITE_APP_API_URL}/api/snaptrade/demo_connect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ broker: broker || 'ROBINHOOD' }),
+      });
+      await refreshPortfolio();
+    } finally {
+      setDemoBusy(false);
+    }
+  };
+
+  const demoDisconnect = async () => {
+    await fetch(`${VITE_APP_API_URL}/api/snaptrade/demo_connect`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${user.token}` },
+    });
+    await refreshPortfolio();
+  };
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Demo mode (eye)
@@ -363,7 +385,7 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                           className="h-3.5 w-3.5"
                         />
                         <div className="flex-1">
-                          <div className="text-[12px] text-gray-900 font-medium">{a.institution || 'Brokerage'}</div>
+                          <div className="text-[12px] text-gray-900 font-medium">{a.institution || 'Brokerage'}{a.demo ? ' · DEMO' : ''}</div>
                           <div className="text-[10px] text-gray-500">{a.name || ''}</div>
                         </div>
                       </label>
@@ -384,7 +406,8 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
         <ManualHoldingsModal open={manualOpen} onClose={() => setManualOpen(false)} onSaved={refreshPortfolio} user={user} />
         {p?.source === 'manual' && (
           <p className="text-[11px] text-gray-500 mb-3 md:text-right">
-            Self-reported holdings{p?.asOf ? ` · priced at ${p.asOf} close` : ''}
+            {p?.hasDemoAccount ? 'Self-reported + simulated SnapTrade account' : 'Self-reported holdings'}
+            {p?.asOf ? (p?.live ? ` · live prices as of ${p.asOf}` : ` · priced at ${p.asOf} close`) : ''}
           </p>
         )}
 
@@ -420,10 +443,16 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                       <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
                         <p className="font-semibold mb-1">SnapTrade linking is available, not enabled here</p>
                         <p className="mb-2">{connectNotice} You can enter your positions manually instead; prices and analysis work the same.</p>
-                        <button onClick={() => { setConnectOpen(false); setManualOpen(true); }}
-                          className="px-2 py-1 rounded bg-green-600 text-white font-semibold hover:bg-green-700 cursor-pointer">
-                          Enter holdings manually
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button onClick={() => { setConnectOpen(false); setManualOpen(true); }}
+                            className="px-2 py-1 rounded bg-green-600 text-white font-semibold hover:bg-green-700 cursor-pointer">
+                            Enter holdings manually
+                          </button>
+                          <button disabled={demoBusy} onClick={() => demoConnect(selectedBroker)}
+                            className="px-2 py-1 rounded border border-amber-400 bg-white font-semibold hover:bg-amber-100 disabled:opacity-50 cursor-pointer">
+                            {demoBusy ? 'Connecting…' : 'Connect demo account (simulated)'}
+                          </button>
+                        </div>
                       </div>
                     )}
                     <p className="text-xs text-gray-600 mb-3">Select your brokerage to open SnapTrade in a new tab.</p>
@@ -669,8 +698,9 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                           onClick={() => h.symbol && handleTickerClick(h.symbol)}
                           className="text-gray-900 font-medium truncate max-w-[180px] hover:underline text-left cursor-pointer"
                         >
-                          {h.symbol || h.name}
+                          {h.symbol || h.name}{h.demo && ' '}
                         </button>
+                        {h.demo && <span className="ml-1 px-1 py-px rounded bg-amber-100 text-amber-800 text-[9px] font-semibold align-middle">DEMO</span>}
                       </div>
                       <div className="text-right text-gray-600 flex items-center gap-3">
                         <span>{formatCurrency(h.marketValue || 0)}</span>
@@ -825,6 +855,7 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
                       <span className="text-gray-900 font-medium truncate max-w-[180px] hover:underline">
                         {h.symbol || h.name}
                       </span>
+                      {h.demo && <span className="ml-1 px-1 py-px rounded bg-amber-100 text-amber-800 text-[9px] font-semibold align-middle">DEMO</span>}
                     </div>
                     <div className="text-right text-gray-600 flex items-center gap-3">
                       <span>{formatCurrency(h.marketValue || 0)}</span>
@@ -868,9 +899,21 @@ function Portfolio({ isChatbotOpen, setIsChatbotOpen, user }) {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {accounts.map((a) => (
-                <div key={a.id} className="border border-gray-200 rounded-md p-3 bg-white">
-                  <p className="text-[12px] font-semibold text-gray-900">{a.institution || 'Brokerage'}</p>
-                  <p className="text-[11px] text-gray-600">{a.name || 'Account'}{a.number ? ` • ${a.number}` : ''}</p>
+                <div key={a.id} className={`border rounded-md p-3 bg-white ${a.demo ? 'border-amber-300' : 'border-gray-200'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[12px] font-semibold text-gray-900">
+                        {a.institution || 'Brokerage'}
+                        {a.demo && <span className="ml-1.5 px-1 py-px rounded bg-amber-100 text-amber-800 text-[9px] font-semibold align-middle">DEMO</span>}
+                      </p>
+                      <p className="text-[11px] text-gray-600">{a.name || 'Account'}{a.number ? ` • ${a.number}` : ''}</p>
+                    </div>
+                    {a.demo && (
+                      <button onClick={demoDisconnect} className="text-[11px] text-gray-500 hover:text-red-600 hover:underline cursor-pointer">
+                        Disconnect
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

@@ -937,18 +937,18 @@ def _clean_holdings(raw):
     return out[:50]
 
 
-def _manual_portfolio_summary(doc):
-    holdings = _clean_holdings(doc.get("manual_holdings"))
-    cash = float(doc.get("manual_cash") or 0)
-    if not holdings and not cash:
-        return None
-    try:
-        as_of, cur, prev = _eod_quotes()
-    except Exception as e:
-        print(f"[portfolio/manual] EOD pricing unavailable: {e}")
-        as_of, cur, prev = None, {}, {}
-    positions, total = [], 0.0
-    live = False
+DEMO_BROKERS = {"ROBINHOOD": "Robinhood", "SCHWAB": "Charles Schwab", "TD": "TD Ameritrade",
+                "INTERACTIVE-BROKERS-FLEX": "Interactive Brokers", "VANGUARD": "Vanguard", "COINBASE": "Coinbase"}
+# Simulated brokerage positions (share counts are made up; prices are live)
+DEMO_POSITIONS = [{"symbol": "AAPL", "quantity": 15, "avgCost": 172.40}, {"symbol": "MSFT", "quantity": 8, "avgCost": 401.25},
+                  {"symbol": "GOOGL", "quantity": 12, "avgCost": 141.80}, {"symbol": "AMZN", "quantity": 10, "avgCost": 178.30},
+                  {"symbol": "VTI", "quantity": 20, "avgCost": 246.10}]
+DEMO_CASH = 1250.0
+
+
+def _price_holdings(holdings, account_id, eod, demo=False):
+    as_of, cur, prev = eod
+    rows, live = [], False
     for h in holdings:
         bar = cur.get(h["symbol"]) or {}
         q = _finnhub_quote(h["symbol"])
@@ -958,31 +958,83 @@ def _manual_portfolio_summary(doc):
         else:
             price = bar.get("c") or h.get("avgCost") or 0
             prev_close = (prev.get(h["symbol"]) or {}).get("c")
-        mv = round(price * h["quantity"], 2)
-        total += mv
-        positions.append({
-            "accountId": "manual", "symbol": h["symbol"], "name": h["symbol"],
-            "quantity": h["quantity"], "price": price, "avgCost": h["avgCost"], "marketValue": mv,
+        cost = h.get("avgCost")
+        rows.append({
+            "accountId": account_id, "symbol": h["symbol"], "name": h["symbol"], "demo": demo,
+            "quantity": h["quantity"], "price": price, "avgCost": cost,
+            "marketValue": round(price * h["quantity"], 2),
             "dayChangePct": round(100 * (price - prev_close) / prev_close, 2) if prev_close else None,
-            "unrealizedPlPct": round(100 * (price - h["avgCost"]) / h["avgCost"], 2) if h["avgCost"] else None,
+            "unrealizedPlPct": round(100 * (price - cost) / cost, 2) if cost else None,
             "priced": bool(q or bar),
         })
-    grand = total or 1.0
+    return rows, live
+
+
+def _manual_portfolio_summary(doc):
+    """Portfolio from self-reported holdings plus the optional simulated brokerage account."""
+    holdings = _clean_holdings(doc.get("manual_holdings"))
+    cash = float(doc.get("manual_cash") or 0)
+    demo = doc.get("demo_brokerage")
+    if not holdings and not cash and not demo:
+        return None
+    try:
+        eod = _eod_quotes()
+    except Exception as e:
+        print(f"[portfolio] EOD pricing unavailable: {e}")
+        eod = (None, {}, {})
+
+    accounts, balances, positions, live = [], [], [], False
+    if holdings or cash:
+        rows, live = _price_holdings(holdings, "manual", eod)
+        accounts.append({"id": "manual", "institution": "Manual holdings", "name": "Self-reported"})
+        balances.append({"accountId": "manual", "amount": round(cash, 2)})
+        positions += rows
+    if demo:
+        rows, live_demo = _price_holdings(DEMO_POSITIONS, "demo", eod, demo=True)
+        live = live or live_demo
+        accounts.append({"id": "demo", "institution": f"{demo.get('institution', 'Brokerage')} (simulated)",
+                         "name": "Demo account via SnapTrade", "demo": True})
+        balances.append({"accountId": "demo", "amount": DEMO_CASH})
+        positions += rows
+
+    total = sum(p["marketValue"] for p in positions) or 1.0
     for pos in positions:
-        pos["weight"] = round(100.0 * pos["marketValue"] / grand, 2)
+        pos["weight"] = round(100.0 * pos["marketValue"] / total, 2)
     positions.sort(key=lambda x: x["marketValue"], reverse=True)
     return {
         "hasConnectedAccounts": True,
         "source": "manual",
-        "asOf": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC") if live else as_of,
+        "hasDemoAccount": bool(demo),
+        "asOf": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC") if live else eod[0],
         "live": live,
-        "totals": {"totalBalance": round(cash, 2), "totalInvestments": round(total, 2)},
-        "accounts": [{"id": "manual", "institution": "Manual holdings", "name": "Self-reported"}],
+        "totals": {"totalBalance": round(sum(b["amount"] for b in balances), 2),
+                   "totalInvestments": round(sum(p["marketValue"] for p in positions), 2)},
+        "accounts": accounts,
         "positions": positions,
         "topHoldings": positions,
-        "balances": [{"accountId": "manual", "amount": round(cash, 2)}],
+        "balances": balances,
         "orders": [],
     }
+
+
+@app.route('/api/snaptrade/demo_connect', methods=['POST'])
+@require_token
+def snaptrade_demo_connect():
+    """Simulated SnapTrade connection for demos (real linking needs SnapTrade keys)."""
+    broker = str((request.get_json() or {}).get("broker") or "ROBINHOOD").upper()
+    client = get_firestore_client()
+    _get_user_doc_ref(client, request.user_email).set({"demo_brokerage": {
+        "broker": broker, "institution": DEMO_BROKERS.get(broker, "Brokerage"),
+        "connected_at": datetime.utcnow().isoformat()}}, merge=True)
+    return jsonify({"connected": True, "demo": True, "institution": DEMO_BROKERS.get(broker, "Brokerage")}), 200
+
+
+@app.route('/api/snaptrade/demo_connect', methods=['DELETE'])
+@require_token
+def snaptrade_demo_disconnect():
+    client = get_firestore_client()
+    _get_user_doc_ref(client, request.user_email).update({"demo_brokerage": firestore.DELETE_FIELD})
+    return jsonify({"connected": False}), 200
 
 
 @app.route('/api/portfolio/manual', methods=['GET'])

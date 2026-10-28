@@ -299,17 +299,32 @@ def get_user_store() -> UserStore:
 # ---------------------------------------------------------------------------
 # Portfolio
 # ---------------------------------------------------------------------------
+# Mirrors DEMO_POSITIONS in server/app.py (simulated SnapTrade account; prices are live)
+DEMO_BROKER_POSITIONS = [{"symbol": "AAPL", "quantity": 15, "avgCost": 172.40},
+                         {"symbol": "MSFT", "quantity": 8, "avgCost": 401.25},
+                         {"symbol": "GOOGL", "quantity": 12, "avgCost": 141.80},
+                         {"symbol": "AMZN", "quantity": 10, "avgCost": 178.30},
+                         {"symbol": "VTI", "quantity": 20, "avgCost": 246.10}]
+DEMO_BROKER_CASH = 1250.0
+
+
 def get_portfolio(email: str, settings: Settings | None = None) -> dict:
     s = settings or get_settings()
     user = get_user_store().get_user(email)
     holdings = None
     if user.get("snaptrade_user_id") and user.get("snaptrade_user_secret"):
         holdings = _snaptrade_positions(user["snaptrade_user_id"], user["snaptrade_user_secret"])
-    if holdings is None and user.get("manual_holdings"):
+    demo = user.get("demo_brokerage")
+    if holdings is None and (user.get("manual_holdings") or demo):
         # Self-reported positions entered on the Portfolio page (same Firestore field the Flask API writes).
-        holdings = {"source": "manual", "totals": {"totalBalance": user.get("manual_cash")},
-                    "positions": [{"symbol": h["symbol"], "name": h["symbol"], "quantity": h["quantity"],
-                                   "avgCost": h.get("avgCost")} for h in user["manual_holdings"]]}
+        rows = [{"symbol": h["symbol"], "name": h["symbol"], "quantity": h["quantity"],
+                 "avgCost": h.get("avgCost"), "account": "manual"} for h in user.get("manual_holdings") or []]
+        cash = float(user.get("manual_cash") or 0)
+        if demo:
+            label = f"{demo.get('institution', 'Brokerage')} (simulated demo account)"
+            rows += [{**h, "name": h["symbol"], "account": label} for h in DEMO_BROKER_POSITIONS]
+            cash += DEMO_BROKER_CASH
+        holdings = {"source": "manual", "totals": {"totalBalance": cash}, "positions": rows}
     if holdings is None:
         if not s.allow_demo_data:
             return {"source": "none", "positions": [], "total_invested": 0,
@@ -326,6 +341,8 @@ def get_portfolio(email: str, settings: Settings | None = None) -> dict:
         total += mv
         pos = {"symbol": p["symbol"], "name": p.get("name"), "quantity": p.get("quantity"),
                "price": price, "market_value": round(mv, 2), "day_change_pct": q.get("change_pct")}
+        if p.get("account"):
+            pos["account"] = p["account"]
         if p.get("avgCost"):
             pos["unrealized_pl_pct"] = round(100 * (price - p["avgCost"]) / p["avgCost"], 2)
         positions.append(pos)
@@ -339,6 +356,8 @@ def get_portfolio(email: str, settings: Settings | None = None) -> dict:
         "positions": positions,
         "concentration_top1_pct": positions[0]["weight_pct"] if positions else 0,
         "watchlist": user.get("watchlist", []),
+        **({"note": "Positions in the simulated account are demo share counts priced at live market prices."}
+           if demo else {}),
     }
 
 
