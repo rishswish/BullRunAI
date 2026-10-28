@@ -1,0 +1,43 @@
+{
+  "_note": "Static sample data used when POLYGON_API_KEY / Firestore are not configured. Prices are illustrative, not live.",
+  "quotes": {
+    "NVDA": {"name": "NVIDIA Corp", "close": 182.40, "open": 179.10, "high": 184.05, "low": 178.62, "prev_close": 178.95, "volume": 214500000},
+    "AAPL": {"name": "Apple Inc.", "close": 231.15, "open": 229.80, "high": 232.40, "low": 228.90, "prev_close": 230.02, "volume": 48200000},
+    "MSFT": {"name": "Microsoft Corp", "close": 512.30, "open": 515.00, "high": 516.20, "low": 509.75, "prev_close": 516.41, "volume": 19100000},
+    "TSLA": {"name": "Tesla Inc.", "close": 338.70, "open": 330.20, "high": 341.90, "low": 328.10, "prev_close": 329.45, "volume": 96700000},
+    "AMZN": {"name": "Amazon.com Inc.", "close": 219.85, "open": 221.30, "high": 222.10, "low": 218.40, "prev_close": 221.96, "volume": 37400000},
+    "GOOGL": {"name": "Alphabet Inc. Class A", "close": 241.60, "open": 239.00, "high": 242.75, "low": 238.55, "prev_close": 238.90, "volume": 28800000},
+    "META": {"name": "Meta Platforms Inc.", "close": 728.90, "open": 732.10, "high": 735.00, "low": 724.30, "prev_close": 734.55, "volume": 11200000},
+    "AMD": {"name": "Advanced Micro Devices", "close": 164.25, "open": 160.10, "high": 165.40, "low": 159.80, "prev_close": 159.92, "volume": 52300000},
+    "SPY": {"name": "SPDR S&P 500 ETF", "close": 662.10, "open": 660.40, "high": 663.30, "low": 659.20, "prev_close": 660.05, "volume": 61500000},
+    "QQQ": {"name": "Invesco QQQ Trust", "close": 598.45, "open": 595.10, "high": 599.80, "low": 594.20, "prev_close": 594.88, "volume": 39800000}
+  },
+  "news": {
+    "NVDA": [
+      {"title": "Data-center demand keeps chip suppliers capacity-constrained", "publisher": "Demo Wire", "published_utc": "2026-10-27T13:05:00Z", "description": "Hyperscaler capex guidance pointed to continued accelerator demand into next year.", "sentiment": "positive"},
+      {"title": "Export-control headlines weigh on semiconductor names", "publisher": "Demo Wire", "published_utc": "2026-10-26T18:40:00Z", "description": "Investors weighed potential licensing changes for advanced chips shipped abroad.", "sentiment": "negative"}
+    ],
+    "AAPL": [
+      {"title": "Services revenue in focus ahead of quarterly results", "publisher": "Demo Wire", "published_utc": "2026-10-27T11:20:00Z", "description": "Analysts expect services growth to offset slower hardware upgrade cycles.", "sentiment": "neutral"}
+    ],
+    "TSLA": [
+      {"title": "Delivery numbers beat lowered expectations", "publisher": "Demo Wire", "published_utc": "2026-10-27T09:00:00Z", "description": "Quarterly deliveries came in above consensus, lifting shares in early trading.", "sentiment": "positive"}
+    ],
+    "MSFT": [
+      {"title": "Cloud margins under the microscope as AI spend rises", "publisher": "Demo Wire", "published_utc": "2026-10-26T15:10:00Z", "description": "Investors are watching whether AI infrastructure costs compress Azure margins.", "sentiment": "neutral"}
+    ]
+  },
+  "portfolio": {
+    "hasConnectedAccounts": true,
+    "source": "demo",
+    "totals": {"totalBalance": 4210.55, "totalInvestments": 48736.20},
+    "positions": [
+      {"symbol": "NVDA", "name": "NVIDIA Corp", "quantity": 80, "avgCost": 96.10},
+      {"symbol": "AAPL", "name": "Apple Inc.", "quantity": 45, "avgCost": 172.40},
+      {"symbol": "MSFT", "name": "Microsoft Corp", "quantity": 20, "avgCost": 401.25},
+      {"symbol": "TSLA", "name": "Tesla Inc.", "quantity": 15, "avgCost": 245.00},
+      {"symbol": "SPY", "name": "SPDR S&P 500 ETF", "quantity": 12, "avgCost": 548.30}
+    ]
+  },
+  "watchlist": ["NVDA", "AMD", "GOOGL", "META"]
+}

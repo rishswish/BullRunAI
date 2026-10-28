@@ -1,0 +1,30 @@
+# Local full stack: MCP server + agent API (+ optional Postgres memory).
+#   cp agent_service/.env.example agent_service/.env   # add GOOGLE_API_KEY
+#   docker compose up --build
+# Agent API: http://localhost:8080/health   MCP: http://localhost:8765/mcp
+services:
+  mcp:
+    build: ./agent_service
+    command: python -m bullrun_agent.mcp_server --http --port 8765
+    env_file: ./agent_service/.env
+    ports: ["8765:8765"]
+
+  agent:
+    build: ./agent_service
+    env_file: ./agent_service/.env
+    environment:
+      TOOLS_MODE: mcp
+      MCP_SERVER_URL: http://mcp:8765/mcp
+      CHECKPOINT_DB_URL: postgresql://bullrun:bullrun@postgres:5432/bullrun
+      PORT: "8080"
+    ports: ["8080:8080"]
+    depends_on: [mcp, postgres]
+
+  postgres:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: bullrun, POSTGRES_PASSWORD: bullrun, POSTGRES_DB: bullrun }
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+
+volumes:
+  pgdata:

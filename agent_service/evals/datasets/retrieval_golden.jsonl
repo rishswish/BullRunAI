@@ -1,0 +1,10 @@
+{"id": "nvda-risk-export", "query": "export controls restricting chip sales to China", "ticker": "NVDA", "section": "Risk Factors", "keywords": ["export"]}
+{"id": "nvda-risk-supply", "query": "dependence on third-party foundries and supply chain", "ticker": "NVDA", "section": "Risk Factors", "keywords": ["supply", "manufactur"]}
+{"id": "nvda-datacenter", "query": "data center revenue growth drivers", "ticker": "NVDA", "section": null, "keywords": ["data center"]}
+{"id": "aapl-services", "query": "services net sales advertising app store cloud", "ticker": "AAPL", "section": null, "keywords": ["services"]}
+{"id": "aapl-risk-china", "query": "operations and supply chain concentrated in China", "ticker": "AAPL", "section": "Risk Factors", "keywords": ["china"]}
+{"id": "msft-cloud", "query": "Microsoft Cloud revenue Azure growth", "ticker": "MSFT", "section": null, "keywords": ["azure"]}
+{"id": "msft-ai-risk", "query": "risks from developing and deploying AI", "ticker": "MSFT", "section": "Risk Factors", "keywords": ["ai"]}
+{"id": "tsla-competition", "query": "competition in the electric vehicle market", "ticker": "TSLA", "section": null, "keywords": ["compet"]}
+{"id": "amzn-aws", "query": "AWS segment operating income", "ticker": "AMZN", "section": null, "keywords": ["aws"]}
+{"id": "googl-ads", "query": "advertising revenue dependence", "ticker": "GOOGL", "section": null, "keywords": ["advertising"]}

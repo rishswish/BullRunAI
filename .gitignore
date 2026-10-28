@@ -24,3 +24,9 @@ dist-ssr/
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Agent service local artifacts
+.pytest_cache/
+.ruff_cache/
+agent_service/evals/results/
+agent_service/data/filings_index/

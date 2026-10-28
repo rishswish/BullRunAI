@@ -1,0 +1,35 @@
+# Python 3.10+ (Docker image uses 3.12)
+# --- API ---
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
+sse-starlette>=2.1
+pydantic-settings>=2.6
+httpx>=0.28
+
+# --- Agent ---
+langgraph>=1.0,<2
+langchain-core>=1.0,<2
+langchain-google-genai>=3.0
+langchain-openai>=1.0
+langchain-anthropic>=1.0
+langsmith>=0.4
+
+# --- MCP ---
+mcp>=1.20,<2
+langchain-mcp-adapters>=0.1.10
+
+# --- RAG ---
+numpy>=2.0
+beautifulsoup4>=4.12
+lxml>=5.0
+
+# --- GCP / existing BullRun integrations ---
+google-auth>=2.40
+requests>=2.32
+google-cloud-firestore>=2.20
+google-cloud-storage>=2.18
+snaptrade-python-sdk
+
+# --- Durable memory (optional; used when CHECKPOINT_DB_URL is set) ---
+langgraph-checkpoint-postgres>=3.0
+psycopg[binary,pool]>=3.2

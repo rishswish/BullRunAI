@@ -12,6 +12,26 @@ Cloud Run Jobs, Firestore, Artifact Registry, and Cloud Build CI/CD.
 
 > BullrunAI is for market education and research. It is not financial advice.
 
+Built by Rishabh Patil and Pramit Bhatia (Best Generative AI Hack, Hacklytics 2025).
+
+## What's new in 2.0: the agent layer
+
+The original chatbot was a keyword filter in front of a single Gemini call. 2.0 adds
+[`agent_service/`](agent_service/README.md):
+
+- **Spade, a LangGraph research agent**: LLM guardrail router, tool-calling loop over
+  quotes, news, SEC filings and the user's portfolio, per-thread memory, and
+  **human-in-the-loop approval** before it edits a watchlist.
+- **Filings RAG**: 10-K/10-Q from SEC EDGAR, section-aware chunking, hybrid BM25 + dense
+  retrieval with Reciprocal Rank Fusion, answers cited as `[S1]` with links to the filing.
+- **BullRun MCP server**: the research tools as an MCP server (tools, resources, prompts),
+  consumed by the agent over HTTP and usable from Claude Desktop or Cursor over stdio.
+- **Evals in CI**: golden dataset for routing, tool selection, citations, disclaimers and
+  HITL, plus LLM-as-judge groundedness and retrieval hit@k/MRR, gating GitHub Actions.
+- **Streaming UI**: the chat panel shows live tool steps, approval cards, sources, latency and tokens.
+- **LLMOps**: provider-agnostic models (Gemini/OpenAI/Anthropic), LangSmith tracing,
+  Secret Manager, per-user rate limits, Docker Compose for local and Cloud Build for deploy.
+
 ## High-Level System Design
 
 ```mermaid
@@ -24,12 +44,19 @@ flowchart LR
     API --> Firestore["Firestore<br/>users + reports"]
     API --> Polygon["Polygon.io<br/>market data + news"]
     API --> SnapTrade["SnapTrade<br/>brokerage + holdings"]
-    API --> Gemini["Gemini<br/>chatbot"]
+    Client --> Agent["br-agent<br/>LangGraph + FastAPI SSE<br/>Cloud Run"]
+    Agent --> MCP["br-mcp<br/>BullRun MCP server<br/>Cloud Run"]
+    MCP --> Polygon
+    MCP --> RAG["Filings index<br/>SEC EDGAR, hybrid retrieval"]
+    Agent --> Firestore
+    Agent --> GeminiLLM["Gemini<br/>agent + router"]
 
     GitHub["GitHub main branch"] --> Build["Cloud Build"]
     Build --> Registry["Artifact Registry"]
     Registry --> Client
     Registry --> API
+    Registry --> Agent
+    Registry --> MCP
     Registry --> GlobalJob["br-global-agent<br/>Cloud Run Job"]
     Registry --> PersonalJob["br-personal-report-agent<br/>Cloud Run Job"]
 
@@ -53,11 +80,12 @@ BullrunAI gives users a personalized market workspace with:
 - Portfolio summaries across connected accounts
 - AI-generated global market reports
 - AI-generated personalized reports based on watchlist and portfolio context
-- Finance-focused chatbot powered by Gemini
+- Spade research agent: tool-using LangGraph agent with cited SEC filings, memory and approval-gated actions
+- BullRun MCP server for using the research tools from any MCP client
 
 ## Product Architecture
 
-BullrunAI is split into four deployable components:
+BullrunAI is split into five deployable components:
 
 | Component | Runtime | Purpose |
 | --- | --- | --- |
@@ -65,6 +93,7 @@ BullrunAI is split into four deployable components:
 | `server/` | Flask + Gunicorn | API layer for auth, users, market data, portfolio, reports, and chatbot |
 | `global_report_agent/` | Python Cloud Run Job | Generates global market reports using Gemini and market context |
 | `personal_report_agent/` | Python Cloud Run Job | Generates personalized user reports from portfolio/watchlist context |
+| `agent_service/` | FastAPI + LangGraph, FastMCP (Cloud Run) | Spade research agent API (SSE) and the BullRun MCP server |
 
 ## Infrastructure Overview
 
@@ -221,9 +250,11 @@ Planned improvements:
 - Redesign the dashboard UI for a more polished investor experience
 - Add public landing page and demo account
 - Add email delivery for daily personalized reports
-- Move all secrets to Secret Manager references
+- Move the Flask server and report jobs to Secret Manager (the agent service already uses it)
 - Add Cloud Scheduler definitions for report jobs
 - Add API tests for auth, watchlist, reports, and SnapTrade flows
 - Add observability for API latency, job failures, report freshness, and LLM cost
 - Add queue-based fanout for personalized report generation at larger scale
 - Add subscription and billing support
+- Port the global/personal report jobs onto the LangGraph agent with eval coverage
+- Add a cross-encoder reranker and semantic response cache to the RAG path
