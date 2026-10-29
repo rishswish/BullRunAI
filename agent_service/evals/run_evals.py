@@ -63,18 +63,36 @@ JUDGE_PROMPT = """You are grading an AI investing assistant's answer.
 USER QUESTION:
 {question}
 
-TOOL OUTPUTS THE ASSISTANT SAW (the only allowed source of specific numbers/facts):
+TOOL OUTPUTS THE ASSISTANT SAW (the only allowed source of specific current numbers):
 {evidence}
 
 ASSISTANT ANSWER:
 {answer}
 
 Score 1-5:
-- groundedness: 5 = every specific number/claim is supported by the tool outputs or is general
-  knowledge; 1 = invents figures or contradicts the tool outputs. If no tools were used, judge
-  whether it avoided stating specific current figures it couldn't know.
+- groundedness: 5 = every specific figure (price, %, revenue, date, share count) is in the tool
+  outputs or follows from them by simple arithmetic; 1 = invents figures or contradicts them.
+  Do NOT penalise general knowledge (what a company does, tickers, how P/E or diversification
+  works), hedged analysis, or saying data is unavailable. Penalise only concrete unsupported
+  figures or claims about the user's data. If no tools were used, judge whether it avoided
+  stating current figures it couldn't know.
 - helpfulness: 5 = directly and clearly answers the question; 1 = evasive or wrong.
-Return ONLY JSON: {{"groundedness": int, "helpfulness": int, "issues": "short note"}}"""
+Return ONLY JSON: {{"groundedness": int, "helpfulness": int, "issues": "name any unsupported figure"}}"""
+
+
+# Fixed test user so results don't depend on whoever ran the evals (local_user.json, Firestore).
+EVAL_USER = {"watchlist": ["NVDA", "MSFT"], "manual_cash": 1500,
+             "manual_holdings": [{"symbol": "NVDA", "quantity": 10, "avgCost": 120.0},
+                                 {"symbol": "AAPL", "quantity": 5, "avgCost": 190.0}]}
+
+
+def use_eval_user() -> None:
+    from bullrun_agent import data_sources
+
+    store = data_sources.DemoUserStore()
+    store._seed = lambda: json.loads(json.dumps(EVAL_USER))
+    data_sources.get_user_store.cache_clear()
+    data_sources.get_user_store = lambda: store
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -84,7 +102,7 @@ def load_jsonl(path: Path) -> list[dict]:
 async def judge(question: str, evidence: str, answer: str) -> dict:
     model = get_router_model()
     msg = await model.ainvoke([SystemMessage("You are a strict, fair evaluator."),
-                               HumanMessage(JUDGE_PROMPT.format(question=question, evidence=evidence[:12000],
+                               HumanMessage(JUDGE_PROMPT.format(question=question, evidence=evidence[:40000],
                                                                 answer=answer))])
     try:
         return parse_json_loose(_text_of(msg.content))
@@ -102,7 +120,7 @@ async def run_agent_case(graph, case: dict, use_judge: bool, has_index: bool) ->
 
     msgs = out["messages"]
     called = [tc["name"] for m in msgs if isinstance(m, AIMessage) for tc in (m.tool_calls or [])]
-    evidence = "\n".join(f"[{m.name}] {_text_of(m.content)[:2000]}" for m in msgs if isinstance(m, ToolMessage))
+    evidence = "\n".join(f"[{m.name}] {_text_of(m.content)[:8000]}" for m in msgs if isinstance(m, ToolMessage))
     answer = _text_of(msgs[-1].content) if isinstance(msgs[-1], AIMessage) else ""
     tokens = sum((m.usage_metadata or {}).get("total_tokens", 0) for m in msgs if isinstance(m, AIMessage))
 
@@ -220,6 +238,11 @@ def to_markdown(summary: dict, results: list[dict], failures: list[str]) -> str:
     bad = [r for r in results if not r.get("error") and (not r["route_ok"] or r["tool_recall"] < 1
            or r.get("disclaimer_ok") is False or r.get("interrupt_ok") is False or r.get("citation_ok") is False)]
     lines += [f"- **{r['id']}**: category={r['category']} tools={r['tools_called']}" for r in bad] or ["- none"]
+    low = [r for r in results if (r.get("judge") or {}).get("groundedness") and r["judge"]["groundedness"] < 4]
+    if low:
+        lines += ["", "## Low groundedness (judge notes)", ""]
+        lines += [f"- **{r['id']}** ({r['judge']['groundedness']}/5): {str(r['judge'].get('issues', ''))[:240]}"
+                  for r in low]
     if errored:
         lines += ["", "## Errored cases", ""]
         lines += [f"- **{r['id']}**: {r['error'][:160]}" for r in errored]
@@ -248,6 +271,7 @@ async def main() -> int:
         if args.only:
             want = set(args.only.split(","))
             cases = [c for c in cases if want & set(c.get("tags", []))]
+        use_eval_user()
         graph = build_graph(await load_tools(), InMemorySaver(), s)
         has_index = get_index() is not None
         sem = asyncio.Semaphore(args.concurrency)

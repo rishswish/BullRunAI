@@ -40,6 +40,8 @@ def get_chat_model(settings: Settings | None = None, *, model: str | None = None
         # reasoning models (gpt-5*, o*) only accept the default temperature
         fixed_temp = name.startswith(("gpt-5", "o1", "o3", "o4"))
         kwargs = {} if fixed_temp else {"temperature": temp}
+        if name.startswith("gpt-5"):
+            kwargs["reasoning_effort"] = "low"  # default effort makes each tool step 10s+
         return ChatOpenAI(model=name, api_key=s.openai_api_key, max_retries=3, **kwargs)
     if s.llm_provider == "anthropic":
         from langchain_anthropic import ChatAnthropic

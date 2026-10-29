@@ -97,7 +97,8 @@ def apply_watchlist_change(email: str, add: list[str], remove: list[str]) -> dic
 def update_watchlist(config: RunnableConfig,
                      add: Annotated[list[str], "Tickers to add"] = [],  # noqa: B006
                      remove: Annotated[list[str], "Tickers to remove"] = []) -> str:  # noqa: B006
-    """Add or remove tickers on the user's watchlist. The user is asked to approve first."""
+    """Add or remove tickers on the user's watchlist. Call it directly for any watchlist edit;
+    it merges with the saved list (duplicates are ignored) and the user approves first."""
     email = _user(config)
     add, remove = _clean(add), _clean(remove)
     if not add and not remove:
