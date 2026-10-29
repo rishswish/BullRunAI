@@ -76,3 +76,17 @@ def test_api_streams_events():
         assert events[0] == "thread" and "tool_start" in events and events[-1] == "final"
         hist = client.get("/api/agent/threads/api").json()
         assert hist["messages"][0] == {"role": "user", "text": "How is AAPL doing?"}
+
+
+def test_runs_are_traceable_and_take_feedback():
+    from bullrun_agent.api import app
+
+    with TestClient(app) as client:
+        with client.stream("POST", "/api/agent/chat", json={"message": "price of NVDA", "thread_id": "fb"}) as r:
+            run_id = r.headers["x-run-id"]
+            body = "".join(r.iter_text())
+        assert run_id in body
+        ok = client.post("/api/agent/feedback", json={"run_id": run_id, "score": 1})
+        assert ok.status_code == 200
+        other = client.post("/api/agent/feedback", json={"run_id": "not-mine", "score": 0})
+        assert other.status_code == 404

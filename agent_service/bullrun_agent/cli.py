@@ -28,6 +28,7 @@ DIM, BOLD, GREEN, YELLOW, RESET = "\033[2m", "\033[1m", "\033[32m", "\033[33m", 
 
 
 async def run_turn(graph, payload, cfg) -> None:
+    cfg = {**cfg, "run_id": uuid.uuid4()}  # same id as the LangSmith trace
     start = time.perf_counter()
     tokens = 0
     async for chunk in graph.astream(payload, cfg, stream_mode="updates"):
@@ -55,7 +56,7 @@ async def run_turn(graph, payload, cfg) -> None:
     last = state.values["messages"][-1]
     if isinstance(last, AIMessage):
         print(f"\n{GREEN}{BOLD}Spade:{RESET} {_text_of(last.content)}")
-    print(f"{DIM}  ({tokens} tokens, {time.perf_counter() - start:.1f}s){RESET}\n")
+    print(f"{DIM}  ({tokens} tokens, {time.perf_counter() - start:.1f}s, trace {cfg['run_id']}){RESET}\n")
 
 
 async def main() -> None:

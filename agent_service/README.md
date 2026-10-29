@@ -54,6 +54,7 @@ flowchart LR
 | **MCP** | FastMCP server with tools, resources and prompts; agent consumes it via `langchain-mcp-adapters`; same server works over stdio for Claude Desktop | `bullrun_agent/mcp_server.py` |
 | **Streaming** | SSE events: `route`, `token`, `tool_start`, `tool_end`, `approval_required`, `final` (with citations, tokens, latency) | `api.py`, `client/src/lib/agentStream.js` |
 | **Evals** | 20-case golden set (routing, tool selection, parallelism, disclaimer, HITL, citations) + LLM-as-judge groundedness; retrieval hit@k / MRR; CI quality gates | `evals/` |
+| **Traceability** | Each answer gets a run ID that is also its LangSmith trace ID; returned to the UI, written to JSON logs, and linked to 👍/👎 feedback (`POST /api/agent/feedback`) | `api.py`, `Chatbot.jsx` |
 | **LLMOps** | Provider-agnostic factory (Gemini / OpenAI / Anthropic / offline fake), LangSmith tracing, per-request token + latency, per-user rate limit | `llm.py`, `api.py` |
 | **Security** | Google ID-token auth; threads namespaced by user; identity injected via `RunnableConfig` (the model can't pick whose portfolio to read); markdown rendered without raw HTML | `api.py`, `tools.py` |
 

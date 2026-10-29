@@ -9,8 +9,10 @@ SSE event types: route, token, tool_start, tool_end, approval_required, final, e
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import time
 import uuid
 from collections import defaultdict, deque
@@ -107,11 +109,29 @@ class ResumeIn(BaseModel):
     approved: bool
 
 
-def _config(user: User, thread_id: str) -> dict:
+class FeedbackIn(BaseModel):
+    run_id: str
+    score: int = Field(ge=0, le=1)
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+def _user_hash(email: str) -> str:
+    return hashlib.sha256(email.lower().encode()).hexdigest()[:12]
+
+
+_recent_runs: dict[str, deque] = defaultdict(lambda: deque(maxlen=200))  # user -> run ids they own
+
+
+def _config(user: User, thread_id: str, run_id: str | None = None) -> dict:
     # Threads are namespaced by user so one user can never load another's memory.
-    return {"configurable": {"thread_id": f"{user.email}:{thread_id}", "user_email": user.email,
-                             "user_name": user.name},
-            "metadata": {"user": user.email}, "tags": ["bullrun-chat"], "run_name": "spade-chat"}
+    cfg = {"configurable": {"thread_id": f"{user.email}:{thread_id}", "user_email": user.email,
+                            "user_name": user.name},
+           "metadata": {"user_id": _user_hash(user.email), "thread_id": thread_id},
+           "tags": ["bullrun-chat"], "run_name": "spade-chat"}
+    if run_id:
+        cfg["run_id"] = uuid.UUID(run_id)  # becomes the LangSmith trace id
+        _recent_runs[user.email].append(run_id)
+    return cfg
 
 
 def _sse(event: str, data: Any) -> dict:
@@ -146,12 +166,13 @@ def _summarize_tool(msg: ToolMessage) -> tuple[str, list[dict]]:
 
 
 async def _stream(graph, payload, config: dict, thread_id: str) -> AsyncIterator[dict]:
+    run_id = str(config.get("run_id", ""))
     started = time.perf_counter()
     usage = {"input_tokens": 0, "output_tokens": 0}
     citations: list[dict] = []
     tools_used: list[str] = []
     interrupted = False
-    yield _sse("thread", {"thread_id": thread_id})
+    yield _sse("thread", {"thread_id": thread_id, "run_id": run_id})
     try:
         async for mode, chunk in graph.astream(payload, config, stream_mode=["messages", "updates"]):
             if mode == "messages":
@@ -194,33 +215,55 @@ async def _stream(graph, payload, config: dict, thread_id: str) -> AsyncIterator
                 "tools_used": tools_used,
                 "usage": usage,
                 "latency_ms": round(1000 * (time.perf_counter() - started)),
+                "run_id": run_id,
             })
-        log.info("chat thread=%s tools=%s usage=%s latency_ms=%d", thread_id, tools_used, usage,
-                 1000 * (time.perf_counter() - started))
+        log.info(json.dumps({"event": "chat", "run_id": run_id, "thread_id": thread_id, "tools": tools_used,
+                             **usage, "latency_ms": round(1000 * (time.perf_counter() - started))}))
     except Exception as e:  # surface failures to the UI instead of a dead stream
-        log.exception("agent stream failed")
-        yield _sse("error", {"message": "Spade hit an error. Please try again.", "detail": e.__class__.__name__})
+        log.exception("agent stream failed run_id=%s", run_id)
+        yield _sse("error", {"message": "Spade hit an error. Please try again.", "detail": e.__class__.__name__,
+                             "run_id": run_id})
 
 
 @app.post("/api/agent/chat")
 async def chat(body: ChatIn, request: Request, user: User = Depends(rate_limited_user)):
     thread_id = body.thread_id or uuid.uuid4().hex
-    cfg = _config(user, thread_id)
     graph = request.app.state.graph
-    state = await graph.aget_state(cfg)
-    if state.next:  # a pending approval exists: a new message implicitly declines it
-        await graph.ainvoke(Command(resume={"approved": False}), cfg)
+    if (await graph.aget_state(_config(user, thread_id))).next:
+        # a pending approval exists: a new message implicitly declines it
+        await graph.ainvoke(Command(resume={"approved": False}), _config(user, thread_id))
+    run_id = str(uuid.uuid4())
     payload = {"messages": [HumanMessage(body.message)]}
-    return EventSourceResponse(_stream(graph, payload, cfg, thread_id))
+    return EventSourceResponse(_stream(graph, payload, _config(user, thread_id, run_id), thread_id),
+                               headers={"X-Run-ID": run_id})
 
 
 @app.post("/api/agent/resume")
 async def resume(body: ResumeIn, request: Request, user: User = Depends(rate_limited_user)):
-    cfg = _config(user, body.thread_id)
     graph = request.app.state.graph
-    if not (await graph.aget_state(cfg)).next:
+    if not (await graph.aget_state(_config(user, body.thread_id))).next:
         raise HTTPException(409, "Nothing is waiting for approval on this thread")
-    return EventSourceResponse(_stream(graph, Command(resume={"approved": body.approved}), cfg, body.thread_id))
+    run_id = str(uuid.uuid4())
+    cfg = _config(user, body.thread_id, run_id)
+    return EventSourceResponse(_stream(graph, Command(resume={"approved": body.approved}), cfg, body.thread_id),
+                               headers={"X-Run-ID": run_id})
+
+
+@app.post("/api/agent/feedback")
+async def feedback(body: FeedbackIn, user: User = Depends(current_user)):
+    if body.run_id not in _recent_runs[user.email]:
+        raise HTTPException(404, "Unknown run")
+    record = {"event": "feedback", "run_id": body.run_id, "score": body.score, "user_id": _user_hash(user.email)}
+    if os.environ.get("LANGSMITH_API_KEY") and os.environ.get("LANGSMITH_TRACING", "").lower() == "true":
+        from langsmith import Client
+
+        try:
+            Client().create_feedback(run_id=body.run_id, key="user_score", score=body.score, comment=body.comment)
+            record["langsmith"] = True
+        except Exception as e:  # feedback must never break the chat
+            log.warning("langsmith feedback failed: %s", e)
+    log.info(json.dumps(record))
+    return {"ok": True}
 
 
 @app.get("/api/agent/threads/{thread_id}")

@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
   MessageSquare, Send, ChevronRight, ChevronLeft, Loader2, Check, X, Plus,
-  LineChart, Newspaper, FileText, Briefcase, ListPlus, AlertTriangle,
+  LineChart, Newspaper, FileText, Briefcase, ListPlus, AlertTriangle, ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 import { AGENT_API_URL, streamAgent } from '../lib/agentStream';
 
@@ -106,7 +106,23 @@ function Citations({ citations }) {
   );
 }
 
-function Bubble({ msg, onDecide }) {
+function Feedback({ msg, onRate }) {
+  if (msg.role !== 'bot' || !msg.runId || msg.streaming) return null;
+  const btn = (score, Icon, label) => (
+    <button onClick={() => onRate(msg, score)} disabled={msg.rating != null} aria-label={label} title={label}
+      className={`p-0.5 rounded cursor-pointer disabled:cursor-default ${msg.rating === score ? 'text-green-700' : 'text-gray-400 hover:text-gray-600'}`}>
+      <Icon className="w-3 h-3" />
+    </button>
+  );
+  return (
+    <span className="inline-flex items-center gap-0.5 ml-1 align-middle">
+      {btn(1, ThumbsUp, 'Helpful')}
+      {btn(0, ThumbsDown, 'Not helpful')}
+    </span>
+  );
+}
+
+function Bubble({ msg, onDecide, onRate }) {
   const isUser = msg.role === 'user';
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -151,6 +167,8 @@ function Bubble({ msg, onDecide }) {
         <p className="text-[9px] text-gray-400 mt-0.5 px-1">
           {msg.time}
           {msg.meta && ` · ${(msg.meta.latency_ms / 1000).toFixed(1)}s · ${msg.meta.usage.input_tokens + msg.meta.usage.output_tokens} tokens`}
+          {msg.runId && !msg.streaming && <span title={`Trace ${msg.runId}`}> · ref {msg.runId.slice(0, 8)}</span>}
+          <Feedback msg={msg} onRate={onRate} />
         </p>
       </div>
     </div>
@@ -198,6 +216,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
     switch (event) {
       case 'thread':
         setThreadId(data.thread_id);
+        if (data.run_id) patch(botId, () => ({ runId: data.run_id }));
         try { sessionStorage.setItem(THREAD_KEY, data.thread_id); } catch { /* storage unavailable */ }
         break;
       case 'token':
@@ -261,6 +280,17 @@ function Chatbot({ isOpen, setIsOpen, user }) {
     run('/api/agent/resume', { thread_id: threadId, approved }, botId);
   }, [patch, run, threadId]);
 
+  const rate = useCallback(async (msg, score) => {
+    patch(msg.id, () => ({ rating: score }));
+    try {
+      await fetch(`${AGENT_API_URL}/api/agent/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}) },
+        body: JSON.stringify({ run_id: msg.runId, score }),
+      });
+    } catch { /* feedback is best-effort */ }
+  }, [patch, user]);
+
   const newChat = () => {
     abortRef.current?.abort();
     setMessages([WELCOME]);
@@ -297,7 +327,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
   const Body = (
     <>
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {messages.map((m) => <Bubble key={m.id} msg={m} onDecide={decide(m.id)} />)}
+        {messages.map((m) => <Bubble key={m.id} msg={m} onDecide={decide(m.id)} onRate={rate} />)}
         {messages.length === 1 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {SUGGESTIONS.map((s) => (
