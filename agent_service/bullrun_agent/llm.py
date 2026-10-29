@@ -37,7 +37,10 @@ def get_chat_model(settings: Settings | None = None, *, model: str | None = None
     if s.llm_provider == "openai":
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(model=name, temperature=temp, api_key=s.openai_api_key)
+        # reasoning models (gpt-5*, o*) only accept the default temperature
+        fixed_temp = name.startswith(("gpt-5", "o1", "o3", "o4"))
+        kwargs = {} if fixed_temp else {"temperature": temp}
+        return ChatOpenAI(model=name, api_key=s.openai_api_key, max_retries=3, **kwargs)
     if s.llm_provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
