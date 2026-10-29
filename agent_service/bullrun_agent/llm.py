@@ -33,7 +33,7 @@ def get_chat_model(settings: Settings | None = None, *, model: str | None = None
     if s.llm_provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        return ChatGoogleGenerativeAI(model=name, temperature=temp, google_api_key=s.google_api_key)
+        return ChatGoogleGenerativeAI(model=name, temperature=temp, google_api_key=s.google_api_key, max_retries=3)
     if s.llm_provider == "openai":
         from langchain_openai import ChatOpenAI
 

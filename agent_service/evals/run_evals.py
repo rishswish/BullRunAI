@@ -155,15 +155,27 @@ def run_retrieval(cases: list[dict], k: int) -> dict:
     return {"k": k, "hit@k": round(hits / n, 3), "mrr": round(rr / n, 3), "evaluated": n, "cases": rows}
 
 
-def aggregate(results: list[dict]) -> dict:
+def is_rate_limit(msg: str) -> bool:
+    return "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower()
+
+
+def retry_after(msg: str) -> float | None:
+    m = re.search(r"retry in ([\d.]+)s", msg)
+    return float(m.group(1)) + 2 if m else None
+
+
+def aggregate(all_results: list[dict]) -> dict:
+    results = [r for r in all_results if not r.get("error")]
+
     def mean(key, rows=results):
         vals = [r[key] for r in rows if r.get(key) is not None]
         return round(sum(vals) / len(vals), 3) if vals else None
 
-    lat = sorted(r["latency_s"] for r in results)
+    lat = sorted(r["latency_s"] for r in results) or [0.0]
     judged = [r["judge"] for r in results if r.get("judge") and r["judge"].get("groundedness")]
     agg = {
-        "cases": len(results),
+        "cases": len(all_results),
+        "errored": len(all_results) - len(results),
         "route_accuracy": mean("route_ok"),
         "tool_recall": mean("tool_recall"),
         "tool_precision": mean("tool_precision"),
@@ -183,6 +195,8 @@ def aggregate(results: list[dict]) -> dict:
 
 def gates(summary: dict) -> list[str]:
     failures = []
+    if summary.get("agent", {}).get("errored"):
+        failures.append(f"{summary['agent']['errored']} cases errored (see report)")
     flat = {**summary.get("agent", {}), **{f"retrieval_{k}": v for k, v in summary.get("retrieval", {}).items()}}
     for key, floor in THRESHOLDS.items():
         val = flat.get(key)
@@ -202,9 +216,13 @@ def to_markdown(summary: dict, results: list[dict], failures: list[str]) -> str:
     ret = summary.get("retrieval", {})
     lines += ["", "## Retrieval", "", f"`{json.dumps({k: v for k, v in ret.items() if k != 'cases'})}`", "",
               "## Failing cases", ""]
-    bad = [r for r in results if not r["route_ok"] or r["tool_recall"] < 1 or r.get("disclaimer_ok") is False
-           or r.get("interrupt_ok") is False or r.get("citation_ok") is False]
+    errored = [r for r in results if r.get("error")]
+    bad = [r for r in results if not r.get("error") and (not r["route_ok"] or r["tool_recall"] < 1
+           or r.get("disclaimer_ok") is False or r.get("interrupt_ok") is False or r.get("citation_ok") is False)]
     lines += [f"- **{r['id']}**: category={r['category']} tools={r['tools_called']}" for r in bad] or ["- none"]
+    if errored:
+        lines += ["", "## Errored cases", ""]
+        lines += [f"- **{r['id']}**: {r['error'][:160]}" for r in errored]
     lines += ["", f"**Gates:** {'FAILED: ' + '; '.join(failures) if failures else 'all passed'}"]
     return "\n".join(lines)
 
@@ -216,6 +234,7 @@ async def main() -> int:
     ap.add_argument("--no-judge", action="store_true")
     ap.add_argument("--k", type=int, default=5)
     ap.add_argument("--concurrency", type=int, default=4)
+    ap.add_argument("--pace", type=float, default=0.0, help="seconds to wait after each case (free tier: ~20)")
     args = ap.parse_args()
 
     s = get_settings()
@@ -235,11 +254,24 @@ async def main() -> int:
 
         async def guarded(c):
             async with sem:
-                try:
-                    return await run_agent_case(graph, c, use_judge, has_index)
-                except Exception as e:  # one bad case shouldn't kill the run
-                    return {"id": c["id"], "error": repr(e), "route_ok": False, "tool_recall": 0.0,
-                            "latency_s": 0.0, "tokens": 0, "category": None, "tools_called": [], "tags": []}
+                for attempt in range(4):
+                    try:
+                        r = await run_agent_case(graph, c, use_judge, has_index)
+                        await asyncio.sleep(args.pace)
+                        return r
+                    except Exception as e:  # one bad case shouldn't kill the run
+                        msg = str(e)
+                        if "per day" in msg.lower() or "PerDay" in msg:
+                            err = "daily quota exhausted"
+                            break
+                        if not is_rate_limit(msg) or attempt == 3:
+                            err = msg
+                            break
+                        wait = retry_after(msg) or 20 * (attempt + 1)
+                        print(f"  {c['id']}: rate limited, retrying in {wait:.0f}s", flush=True)
+                        await asyncio.sleep(wait)
+                return {"id": c["id"], "error": err[:300], "route_ok": None, "tool_recall": None,
+                        "latency_s": 0.0, "tokens": 0, "category": None, "tools_called": [], "tags": c.get("tags", [])}
 
         results = await asyncio.gather(*(guarded(c) for c in cases))
         summary["agent"] = aggregate(results)
