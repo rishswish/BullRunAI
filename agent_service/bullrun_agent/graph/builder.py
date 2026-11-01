@@ -7,7 +7,7 @@
 
 * guardrail   - structured-output classifier (replaces the old keyword regex);
                 cheap model, temperature 0.
-* agent       - tool-calling LLM over a trimmed window of the thread's history.
+* agent       - tool-calling LLM over the thread's history, trimmed to a token budget.
 * tools       - ToolNode, executes parallel tool calls, turns exceptions into
                 ToolMessages the model can recover from. `update_watchlist`
                 pauses the whole graph with interrupt() for user approval.
@@ -22,7 +22,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, trim_messages
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, trim_messages
+from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -40,6 +41,19 @@ class AgentState(MessagesState):
     steps: int
 
 
+def trim_history(messages: list[BaseMessage], max_tokens: int) -> list[BaseMessage]:
+    """Keep the current turn whole and fill the rest of the token budget with the newest older turns."""
+    last_human = next((i for i in range(len(messages) - 1, -1, -1) if isinstance(messages[i], HumanMessage)), 0)
+    older, current = messages[:last_human], messages[last_human:]
+    budget = max_tokens - count_tokens_approximately(current)
+    if budget <= 0 or not older:
+        return current
+    # start_on="human" so we never open on a tool result whose tool call was cut
+    kept = trim_messages(older, max_tokens=budget, token_counter=count_tokens_approximately,
+                         strategy="last", start_on="human", include_system=False, allow_partial=False)
+    return [*kept, *current]
+
+
 class RouteDecision(BaseModel):
     """Guardrail classification of the latest user message."""
 
@@ -53,8 +67,6 @@ def build_graph(tools: list[BaseTool], checkpointer=None, settings: Settings | N
     s = settings or get_settings()
     llm = (chat_model or get_chat_model(s)).bind_tools(tools)
     router = (router_model or get_router_model(s)).with_structured_output(RouteDecision)
-    trimmer = trim_messages(max_tokens=s.max_history_messages, token_counter=len, strategy="last",
-                            start_on="human", include_system=False, allow_partial=False)
 
     # -- nodes ---------------------------------------------------------------
     async def guardrail(state: AgentState) -> dict:
@@ -66,7 +78,7 @@ def build_graph(tools: list[BaseTool], checkpointer=None, settings: Settings | N
         cfg = config.get("configurable", {})
         system = SystemMessage(prompts.AGENT_PROMPT.format(
             today=date.today().isoformat(), user_name=cfg.get("user_name") or "the user"))
-        history = trimmer.invoke(state["messages"])
+        history = trim_history(state["messages"], s.max_history_tokens)
         steps = state.get("steps", 0) + 1
         model = llm
         if steps > s.max_agent_steps:  # loop guard: force a final answer without more tools

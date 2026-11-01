@@ -90,3 +90,24 @@ def test_runs_are_traceable_and_take_feedback():
         assert ok.status_code == 200
         other = client.post("/api/agent/feedback", json={"run_id": "not-mine", "score": 0})
         assert other.status_code == 404
+
+
+def test_trim_keeps_current_turn_and_drops_old_by_tokens():
+    from langchain_core.messages import HumanMessage
+
+    from bullrun_agent.graph.builder import trim_history
+
+    big = "risk factors " * 2000  # ~6k tokens of filing text
+    old = [HumanMessage("old q1"), AIMessage("", tool_calls=[{"name": "search_filings", "args": {}, "id": "a"}]),
+           ToolMessage(big, tool_call_id="a", name="search_filings"), AIMessage("old a1"),
+           HumanMessage("old q2"), AIMessage("old a2")]
+    current = [HumanMessage("what are MSFT's risks?"),
+               AIMessage("", tool_calls=[{"name": "search_filings", "args": {}, "id": "b"}]),
+               ToolMessage(big * 3, tool_call_id="b", name="search_filings")]
+
+    # current turn alone is over budget: still sent whole, nothing older
+    assert trim_history(old + current, 4000) == current
+    # roomy budget: the newest old turn fits, the big old one is dropped, no orphan tool result
+    out = trim_history(old + current, 22000)
+    assert out[0].content == "old q2" and out[-3:] == current
+    assert len(trim_history(old + current, 100000)) == len(old) + len(current)

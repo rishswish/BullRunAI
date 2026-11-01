@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     # --- Agent / API ----------------------------------------------------------
     tools_mode: Literal["local", "mcp"] = "local"
     mcp_server_url: str = "http://localhost:8765/mcp"
-    max_history_messages: int = 20
+    max_history_tokens: int = 12000  # older turns only; the current turn is never trimmed
     max_agent_steps: int = 8
     checkpoint_db_url: str | None = None  # postgres://... for durable memory
 

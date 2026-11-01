@@ -48,7 +48,7 @@ flowchart LR
 | **Agent orchestration** | LangGraph `StateGraph`: guardrail → agent ⇄ tools → compliance; loop guard on tool steps | `bullrun_agent/graph/builder.py` |
 | **Tool calling** | 5 typed LangChain tools; parallel calls; tool errors returned to the model, not thrown | `bullrun_agent/tools.py` |
 | **Human-in-the-loop** | `update_watchlist` calls `interrupt()`; UI shows Approve/Decline; `/resume` sends `Command(resume=...)` | `tools.py`, `api.py`, `Chatbot.jsx` |
-| **Memory** | Per-thread checkpointer (InMemorySaver → `AsyncPostgresSaver` via `CHECKPOINT_DB_URL`); history window trimmed with `trim_messages` | `graph/builder.py` |
+| **Memory** | Per-thread checkpointer (InMemorySaver → `AsyncPostgresSaver` via `CHECKPOINT_DB_URL`); history trimmed to a token budget (current turn always kept) | `graph/builder.py` |
 | **Guardrails** | LLM router with Pydantic structured output (finance / off_topic / unsafe + advice flag) replaces the 90-keyword regex; deterministic disclaimer node | `graph/` |
 | **RAG** | EDGAR ingest → section-aware chunking (Item 1A, Item 7…) → hybrid BM25 + dense retrieval fused with Reciprocal Rank Fusion → `[S#]` citations with filing URLs | `bullrun_agent/rag/` |
 | **MCP** | FastMCP server with tools, resources and prompts; agent consumes it via `langchain-mcp-adapters`; same server works over stdio for Claude Desktop | `bullrun_agent/mcp_server.py` |
