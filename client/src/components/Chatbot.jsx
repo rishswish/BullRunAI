@@ -302,6 +302,9 @@ function Chatbot({ isOpen, setIsOpen, user }) {
           citations: [...(m.citations || []), ...(data.citations || [])],
         }));
         break;
+      case 'title':
+        setThreads((prev) => prev.map((th) => (th.id === data.thread_id ? { ...th, title: data.title } : th)));
+        break;
       case 'error':
         patch(botId, () => ({ error: data.message || 'Something went wrong', streaming: false }));
         break;

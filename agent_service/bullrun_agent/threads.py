@@ -27,11 +27,22 @@ def _title(text: str) -> str:
     return text if len(text) <= 60 else text[:57].rstrip() + "..."
 
 
+def unique_title(title: str, taken: set[str]) -> str:
+    """'NVDA earnings' -> 'NVDA earnings (2)' if the user already has a chat called that."""
+    if title not in taken:
+        return title
+    n = 2
+    while f"{title} ({n})" in taken:
+        n += 1
+    return f"{title} ({n})"
+
+
 class ThreadStore(Protocol):
     def list(self, email: str) -> list[dict]: ...
     def get(self, email: str, thread_id: str) -> dict | None: ...
     def append(self, email: str, thread_id: str, messages: list[dict]) -> None: ...
     def delete(self, email: str, thread_id: str) -> None: ...
+    def set_title(self, email: str, thread_id: str, title: str) -> None: ...
 
 
 class MemoryThreadStore:
@@ -48,15 +59,22 @@ class MemoryThreadStore:
         return self._data.get(email, {}).get(thread_id)
 
     def append(self, email: str, thread_id: str, messages: list[dict]) -> None:
+        taken = {r["title"] for r in self.list(email)}
         with self._lock:
             t = self._data.setdefault(email, {}).setdefault(
-                thread_id, {"title": _title(messages[0]["text"]), "created_at": _now(), "messages": []})
+                thread_id, {"title": unique_title(_title(messages[0]["text"]), taken), "created_at": _now(),
+                            "messages": []})
             t["messages"] = (t["messages"] + messages)[-MAX_MESSAGES:]
             t["updated_at"] = _now()
 
     def delete(self, email: str, thread_id: str) -> None:
         with self._lock:
             self._data.get(email, {}).pop(thread_id, None)
+
+    def set_title(self, email: str, thread_id: str, title: str) -> None:
+        with self._lock:
+            if t := self._data.get(email, {}).get(thread_id):
+                t["title"], t["titled"] = title, True
 
 
 class FirestoreThreadStore:
@@ -78,14 +96,20 @@ class FirestoreThreadStore:
     def append(self, email: str, thread_id: str, messages: list[dict]) -> None:
         ref = self._col(email).document(thread_id)
         snap = ref.get()
-        doc = snap.to_dict() if snap.exists else {"title": _title(messages[0]["text"]), "created_at": _now(),
-                                                   "messages": []}
+        if snap.exists:
+            doc = snap.to_dict()
+        else:
+            taken = {r["title"] for r in self.list(email)}
+            doc = {"title": unique_title(_title(messages[0]["text"]), taken), "created_at": _now(), "messages": []}
         doc["messages"] = (doc.get("messages", []) + messages)[-MAX_MESSAGES:]
         doc["updated_at"] = _now()
         ref.set(doc)
 
     def delete(self, email: str, thread_id: str) -> None:
         self._col(email).document(thread_id).delete()
+
+    def set_title(self, email: str, thread_id: str, title: str) -> None:
+        self._col(email).document(thread_id).set({"title": title, "titled": True}, merge=True)
 
 
 @lru_cache

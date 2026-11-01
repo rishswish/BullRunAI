@@ -198,6 +198,39 @@ async def _save_transcript(email: str, thread_id: str, messages: list[dict]) -> 
         log.exception("saving chat history failed thread=%s", thread_id)
 
 
+TITLE_PROMPT = """Name this chat for a sidebar list. 2-6 words, specific (tickers, topic), no quotes or
+trailing punctuation. It must differ from the user's other chat titles: {taken}
+
+User: {question}
+Assistant: {answer}
+
+Title:"""
+
+
+async def _name_thread(email: str, thread_id: str, question: str, answer: str) -> str | None:
+    """Give a new chat a short, unique, model-written title (the first message is the fallback)."""
+    from .llm import get_router_model
+    from .threads import unique_title
+
+    store = get_thread_store()
+    try:
+        saved = await asyncio.to_thread(store.get, email, thread_id)
+        if not saved or saved.get("titled") or get_settings().llm_provider == "fake":
+            return None
+        others = [r["title"] for r in await asyncio.to_thread(store.list, email) if r["id"] != thread_id]
+        msg = await get_router_model().ainvoke(TITLE_PROMPT.format(
+            taken="; ".join(others[:20]) or "(none)", question=question[:500], answer=answer[:1200]))
+        title = _text_of(msg.content).strip().strip('"\'.').splitlines()[0][:60]
+        if not title:
+            return None
+        title = unique_title(title, set(others))
+        await asyncio.to_thread(store.set_title, email, thread_id, title)
+        return title
+    except Exception:
+        log.warning("naming chat failed thread=%s", thread_id, exc_info=True)
+        return None
+
+
 async def _stream(graph, payload, config: dict, thread_id: str, user_text: str | None = None) -> AsyncIterator[dict]:
     run_id = str(config.get("run_id", ""))
     started = time.perf_counter()
@@ -240,12 +273,14 @@ async def _stream(graph, payload, config: dict, thread_id: str, user_text: str |
                                                 "status": getattr(m, "status", "success")})
         email = config["configurable"]["user_email"]
         said = [{"role": "user", "text": user_text}] if user_text else []
+        final_text = None
         if interrupted:
             await _save_transcript(email, thread_id, said)
         else:
             state = await graph.aget_state(config)
             final = state.values["messages"][-1]
-            await _save_transcript(email, thread_id, said + [{"role": "assistant", "text": _text_of(final.content)}])
+            final_text = _text_of(final.content)
+            await _save_transcript(email, thread_id, said + [{"role": "assistant", "text": final_text}])
             yield _sse("final", {
                 "text": _text_of(final.content),
                 "category": state.values.get("category"),
@@ -255,6 +290,11 @@ async def _stream(graph, payload, config: dict, thread_id: str, user_text: str |
                 "latency_ms": round(1000 * (time.perf_counter() - started)),
                 "run_id": run_id,
             })
+        if final_text:  # after "final" so the answer isn't held up; the stream stays open a moment longer
+            saved = await asyncio.to_thread(get_thread_store().get, email, thread_id)
+            question = next((m["text"] for m in (saved or {}).get("messages", []) if m["role"] == "user"), "")
+            if title := await _name_thread(email, thread_id, question, final_text):
+                yield _sse("title", {"thread_id": thread_id, "title": title})
         log.info(json.dumps({"event": "chat", "run_id": run_id, "thread_id": thread_id, "tools": tools_used,
                              **usage, "latency_ms": round(1000 * (time.perf_counter() - started))}))
     except Exception as e:  # surface failures to the UI instead of a dead stream

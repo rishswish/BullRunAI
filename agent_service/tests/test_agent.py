@@ -176,3 +176,26 @@ def test_threads_are_listed_and_survive_a_restart():
 
         assert client.delete("/api/agent/threads/b").json()["ok"]
         assert [t["id"] for t in client.get("/api/agent/threads").json()["threads"]] == ["a"]
+
+
+async def test_chats_get_short_unique_titles(monkeypatch):
+    from bullrun_agent import api, llm
+    from bullrun_agent.config import get_settings
+    from bullrun_agent.threads import MemoryThreadStore
+
+    store = MemoryThreadStore()
+    monkeypatch.setattr(api, "get_thread_store", lambda: store)
+    for tid in ("t1", "t2"):  # same first message twice: fallback titles still differ
+        store.append("u@x.com", tid, [{"role": "user", "text": "Add AMD to my watchlist"},
+                                      {"role": "assistant", "text": "Done."}])
+    assert {r["title"] for r in store.list("u@x.com")} == {"Add AMD to my watchlist", "Add AMD to my watchlist (2)"}
+
+    class Namer:
+        async def ainvoke(self, prompt):
+            assert "Add AMD to my watchlist" in prompt  # sees the other chats' titles
+            return AIMessage('"Adding AMD to watchlist."')
+
+    monkeypatch.setattr(api, "get_settings", lambda: get_settings().model_copy(update={"llm_provider": "gemini"}))
+    monkeypatch.setattr(llm, "get_router_model", lambda *a: Namer())
+    assert await api._name_thread("u@x.com", "t2", "Add AMD to my watchlist", "Done.") == "Adding AMD to watchlist"
+    assert await api._name_thread("u@x.com", "t2", "again", "Done.") is None  # only named once
