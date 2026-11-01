@@ -4,6 +4,7 @@
     python -m evals.run_evals --suite agent --no-judge
     python -m evals.run_evals --only rag,guardrail  # filter by tag
     LLM_PROVIDER=fake python -m evals.run_evals    # plumbing check, no API key
+    JUDGE_MODEL=gemini-3.5-flash python -m evals.run_evals   # judge with another model (default: LLM_MODEL)
 
 Agent metrics (per case, then aggregated)
   route_accuracy      guardrail category == expected
@@ -44,7 +45,7 @@ from bullrun_agent.config import get_settings  # noqa: E402
 from bullrun_agent.graph import build_graph  # noqa: E402
 from bullrun_agent.graph.builder import _text_of  # noqa: E402
 from bullrun_agent.graph.prompts import DISCLAIMER  # noqa: E402
-from bullrun_agent.llm import get_embeddings, get_router_model, parse_json_loose  # noqa: E402
+from bullrun_agent.llm import get_chat_model, get_embeddings, parse_json_loose  # noqa: E402
 from bullrun_agent.rag import get_index  # noqa: E402
 from bullrun_agent.tools import load_tools  # noqa: E402
 
@@ -99,8 +100,13 @@ def load_jsonl(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+def judge_model_name() -> str:
+    # The judge should be at least as strong as the model it grades, so not the cheap router model.
+    return os.environ.get("JUDGE_MODEL") or get_settings().llm_model
+
+
 async def judge(question: str, evidence: str, answer: str) -> dict:
-    model = get_router_model()
+    model = get_chat_model(model=judge_model_name(), temperature=0)
     msg = await model.ainvoke([SystemMessage("You are a strict, fair evaluator."),
                                HumanMessage(JUDGE_PROMPT.format(question=question, evidence=evidence[:40000],
                                                                 answer=answer))])
@@ -226,7 +232,8 @@ def gates(summary: dict) -> list[str]:
 def to_markdown(summary: dict, results: list[dict], failures: list[str]) -> str:
     s = get_settings()
     lines = [f"# Spade eval report ({summary['timestamp']})", "",
-             f"Model: `{s.llm_provider}/{s.llm_model}` | judge: `{s.router_model or s.llm_model}`", "",
+             f"Model: `{s.llm_provider}/{s.llm_model}` | router: `{s.router_model or s.llm_model}` "
+             f"| judge: `{judge_model_name()}`", "",
              "## Agent", "", "| metric | value | gate |", "|---|---|---|"]
     for k, v in summary.get("agent", {}).items():
         gate = THRESHOLDS.get(k)
