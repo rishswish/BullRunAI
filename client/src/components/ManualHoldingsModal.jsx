@@ -38,9 +38,16 @@ export default function ManualHoldingsModal({ open, onClose, onSaved, user }) {
   const update = (i, key, val) =>
     setRows((prev) => prev.map((r, j) => (j === i ? { ...r, [key]: key === 'symbol' ? val.toUpperCase() : val } : r)));
 
+  // accept "95,40" as well as "95.40"
+  const num = (v) => Number(String(v).trim().replace(',', '.'));
+  const rowErrors = (r) => ({
+    symbol: !TICKER_RE.test(r.symbol),
+    quantity: !(num(r.quantity) > 0),
+    avgCost: String(r.avgCost).trim() !== '' && !(num(r.avgCost) >= 0),
+  });
   const filled = rows.filter((r) => r.symbol || r.quantity || r.avgCost);
-  const invalid = filled.some((r) => !TICKER_RE.test(r.symbol) || !(Number(r.quantity) > 0)
-    || (r.avgCost !== '' && !(Number(r.avgCost) >= 0)));
+  const cashBad = String(cash).trim() !== '' && !(num(cash) >= 0);
+  const invalid = cashBad || filled.some((r) => Object.values(rowErrors(r)).some(Boolean));
 
   const save = async () => {
     setSaving(true);
@@ -51,9 +58,9 @@ export default function ManualHoldingsModal({ open, onClose, onSaved, user }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
         body: JSON.stringify({
           holdings: filled.map((r) => ({
-            symbol: r.symbol, quantity: Number(r.quantity), avgCost: r.avgCost === '' ? null : Number(r.avgCost),
+            symbol: r.symbol, quantity: num(r.quantity), avgCost: String(r.avgCost).trim() === '' ? null : num(r.avgCost),
           })),
-          cash: Number(cash || 0),
+          cash: num(cash || 0),
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -87,17 +94,19 @@ export default function ManualHoldingsModal({ open, onClose, onSaved, user }) {
               <div className="grid grid-cols-[1fr_1fr_1fr_28px] gap-2 text-[11px] font-medium text-gray-500 mb-1 px-0.5">
                 <span>Ticker</span><span>Shares</span><span>Avg cost ($, optional)</span><span />
               </div>
-              <div className="space-y-1.5 max-h-72 overflow-auto pr-1">
+              <div className="space-y-1.5 max-h-72 overflow-y-auto overflow-x-hidden pr-1">
                 {rows.map((r, i) => {
-                  const bad = (r.symbol || r.quantity) && (!TICKER_RE.test(r.symbol) || !(Number(r.quantity) > 0));
+                  const touched = r.symbol || r.quantity || r.avgCost;
+                  const err = touched ? rowErrors(r) : {};
+                  const cls = (bad) => `w-full min-w-0 px-2 py-1.5 text-xs border rounded-md focus:outline-none focus:ring-1 focus:ring-green-600 ${bad ? 'border-red-400 bg-red-50' : 'border-gray-200'}`;
                   return (
                     <div key={i} className="grid grid-cols-[1fr_1fr_1fr_28px] gap-2 items-center">
                       <input value={r.symbol} onChange={(e) => update(i, 'symbol', e.target.value)} placeholder="NVDA"
-                        className={`px-2 py-1.5 text-xs border rounded-md focus:outline-none focus:ring-1 focus:ring-green-600 ${bad ? 'border-red-300' : 'border-gray-200'}`} />
+                        className={cls(err.symbol)} />
                       <input value={r.quantity} onChange={(e) => update(i, 'quantity', e.target.value)} placeholder="10"
-                        inputMode="decimal" className="px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-green-600" />
+                        inputMode="decimal" className={cls(err.quantity)} />
                       <input value={r.avgCost} onChange={(e) => update(i, 'avgCost', e.target.value)} placeholder="120.50"
-                        inputMode="decimal" className="px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-green-600" />
+                        inputMode="decimal" className={cls(err.avgCost)} />
                       <button onClick={() => setRows((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : [emptyRow()]))}
                         className="p-1 text-gray-400 hover:text-red-500 cursor-pointer" aria-label="Remove row">
                         <Trash2 className="w-3.5 h-3.5" />
@@ -114,11 +123,11 @@ export default function ManualHoldingsModal({ open, onClose, onSaved, user }) {
               <div className="mt-4 flex items-center gap-2">
                 <label className="text-xs text-gray-600 w-28">Cash ($)</label>
                 <input value={cash} onChange={(e) => setCash(e.target.value)} placeholder="0" inputMode="decimal"
-                  className="flex-1 px-2 py-1.5 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-green-600" />
+                  className={`flex-1 min-w-0 px-2 py-1.5 text-xs border rounded-md focus:outline-none focus:ring-1 focus:ring-green-600 ${cashBad ? 'border-red-400 bg-red-50' : 'border-gray-200'}`} />
               </div>
 
               {error && <p className="text-[11px] text-red-600 mt-3">{error}</p>}
-              {invalid && <p className="text-[11px] text-red-600 mt-3">Check the highlighted rows: ticker like NVDA, shares above 0.</p>}
+              {invalid && <p className="text-[11px] text-red-600 mt-3">Check the highlighted fields: ticker like NVDA, shares above 0, prices as numbers like 95.40.</p>}
 
               <div className="mt-4 flex gap-2 justify-end">
                 <button onClick={onClose} className="px-3 py-1.5 text-xs border border-gray-200 rounded-md hover:bg-gray-50 cursor-pointer">Cancel</button>
