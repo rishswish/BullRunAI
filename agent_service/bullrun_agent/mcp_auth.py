@@ -100,7 +100,25 @@ class GoogleOAuthProvider:
     # -- clients (dynamic registration) ----------------------------------------
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         data = self.clients.get(client_id)
+        if data is None and client_id.startswith("https://"):
+            data = await self._metadata_document(client_id)
         return OAuthClientInformationFull.model_validate(data) if data else None
+
+    async def _metadata_document(self, url: str) -> dict | None:
+        """Clients may identify themselves by a URL that hosts their metadata (Client ID Metadata
+        Documents) instead of registering; fetch it once and remember it."""
+        try:
+            async with httpx.AsyncClient(timeout=5, follow_redirects=False) as http:
+                doc = (await http.get(url)).raise_for_status().json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        if doc.get("client_id") != url or not doc.get("redirect_uris"):
+            return None
+        data = {"client_id": url, "redirect_uris": doc["redirect_uris"], "client_name": doc.get("client_name"),
+                "token_endpoint_auth_method": "none", "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"], "scope": SCOPE}
+        self.clients.put(url, data)
+        return data
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         self.clients.put(client_info.client_id, client_info.model_dump(mode="json", exclude_none=True))

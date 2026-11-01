@@ -108,3 +108,43 @@ def test_service_token_gets_public_tools_but_no_account(server):
     assert asyncio.run(_call(server, token, "get_quote", {"ticker": "NVDA"}))[0] is False
     err, text = asyncio.run(_call(server, token, "get_watchlist"))
     assert err and "isn't signed in" in text
+
+
+def test_client_id_metadata_documents_are_accepted(monkeypatch):
+    from bullrun_agent import mcp_auth
+
+    provider = mcp_auth.GoogleOAuthProvider(public_url="https://mcp.example", secret="s" * 32,
+                                            google_client_id="g", google_client_secret="gs")
+    url = "https://claude.ai/oauth/mcp-client-metadata"
+
+    class Resp:
+        def __init__(self, body):
+            self.body = body
+
+        def raise_for_status(self):
+            return self
+
+        def json(self):
+            return self.body
+
+    class Http:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, u):
+            return Resp({"client_id": u, "client_name": "Claude", "redirect_uris": [CALLBACK]})
+
+    monkeypatch.setattr(mcp_auth.httpx, "AsyncClient", Http)
+    client = asyncio.run(provider.get_client(url))
+    assert client.client_id == url and str(client.redirect_uris[0]) == CALLBACK
+
+    async def mismatched(self, u):  # a document that claims a different client id is rejected
+        return Resp({"client_id": "https://someone-else", "redirect_uris": [CALLBACK]})
+    monkeypatch.setattr(Http, "get", mismatched)
+    assert asyncio.run(provider.get_client("https://claude.ai/other")) is None

@@ -4,11 +4,15 @@ import { Check, Copy, ExternalLink, Plug, X } from 'lucide-react';
 const MCP_URL = import.meta.env.VITE_MCP_URL;
 const API = import.meta.env.VITE_APP_API_URL;
 
+// Claude's documented install link: opens "Add custom connector" with the name and URL filled in.
+const INSTALL_URL = MCP_URL
+  ? `https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=BullRun&connectorUrl=${encodeURIComponent(MCP_URL)}`
+  : null;
+
 const STEPS = [
-  'In Claude, open Settings → Connectors and choose "Add custom connector".',
-  'Name it BullRun and paste the server URL below. Leave the advanced settings empty.',
-  'Click Connect and sign in with the same Google account you use here.',
-  'In a new chat, turn on the BullRun connector and ask away.',
+  'Click "Add to Claude" and confirm with Add (if asked how Claude should register, pick "Register automatically").',
+  'Click Connect next to BullRun and sign in with the same Google account you use here.',
+  'In a Claude chat, turn BullRun on from the + menu → Connectors, and ask away.',
 ];
 
 const EXAMPLES = [
@@ -23,11 +27,14 @@ export default function ClaudeConnectModal({ open, onClose, user }) {
   const [connection, setConnection] = useState(null);
 
   useEffect(() => {
-    if (!open || !user?.token) return;
-    fetch(`${API}/api/user`, { headers: { Authorization: `Bearer ${user.token}` } })
+    if (!open || !user?.token) return undefined;
+    const check = () => fetch(`${API}/api/user`, { headers: { Authorization: `Bearer ${user.token}` } })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setConnection(d?.mcpConnection || null))
-      .catch(() => setConnection(null));
+      .catch(() => {});
+    check();
+    const id = setInterval(check, 5000); // flips to "Connected" once you finish signing in from Claude
+    return () => clearInterval(id);
   }, [open, user?.token]);
 
   if (!open) return null;
@@ -69,12 +76,19 @@ export default function ClaudeConnectModal({ open, onClose, user }) {
               : 'Not connected yet. It takes about a minute.'}
           </div>
 
+          {INSTALL_URL && (
+            <a href={INSTALL_URL} target="_blank" rel="noreferrer"
+              className="flex items-center justify-center gap-1.5 w-full py-2 text-sm font-semibold rounded-md bg-green-600 text-white hover:bg-green-700">
+              <Plug className="w-4 h-4" /> {connection ? 'Add to Claude again' : 'Add to Claude'}
+            </a>
+          )}
+
           <ol className="space-y-1.5 text-xs text-gray-700 list-decimal pl-4">
             {STEPS.map((s) => <li key={s}>{s}</li>)}
           </ol>
 
           <div>
-            <div className="text-[11px] font-medium text-gray-500 mb-1">Server URL</div>
+            <div className="text-[11px] font-medium text-gray-500 mb-1">Or add it by hand with this server URL</div>
             {MCP_URL ? (
               <div className="flex gap-1.5">
                 <input readOnly value={MCP_URL} onFocus={(e) => e.target.select()}
@@ -90,7 +104,7 @@ export default function ClaudeConnectModal({ open, onClose, user }) {
             )}
           </div>
 
-          <a href="https://claude.ai/settings/connectors" target="_blank" rel="noreferrer"
+          <a href="https://claude.ai/customize/connectors" target="_blank" rel="noreferrer"
             className="inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:underline">
             Open Claude connector settings <ExternalLink className="w-3 h-3" />
           </a>
