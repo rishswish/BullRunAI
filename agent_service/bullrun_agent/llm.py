@@ -61,7 +61,7 @@ def get_router_model(settings: Settings | None = None) -> BaseChatModel:
 def get_fallback_settings(settings: Settings | None = None) -> Settings | None:
     """Settings for the backup provider, or None if no backup is configured."""
     s = settings or get_settings()
-    if not s.fallback_provider or s.fallback_provider == s.llm_provider:
+    if not s.fallback_provider or (s.fallback_provider, s.fallback_model) == (s.llm_provider, s.llm_model):
         return None
     return s.model_copy(update={"llm_provider": s.fallback_provider, "llm_model": s.fallback_model,
                                 "router_model": None, "fallback_provider": None})

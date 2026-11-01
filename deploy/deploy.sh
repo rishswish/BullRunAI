@@ -23,7 +23,7 @@
 #   Firestore (default) database, Secret Manager secrets, one runtime service account
 #
 # Options (environment variables):
-#   REGION=us-central1     LLM_MODEL=gemini-2.5-flash     ROUTER_MODEL=gemini-2.5-flash-lite
+#   REGION=us-central1     LLM_MODEL=gemini-3.8-flash     ROUTER_MODEL=gemini-3.1-flash-lite
 #   MIN_INSTANCES=0        set to 1 on demo day to avoid cold starts (small hourly cost)
 #   RESET_SECRETS=1        re-prompt for every API key
 #   SKIP_BUILD=1           redeploy using the last built images
@@ -36,8 +36,8 @@ cd "$(dirname "$0")/.."
 REPO_ROOT=$(pwd)
 
 REGION=${REGION:-us-central1}
-LLM_MODEL=${LLM_MODEL:-gemini-2.5-flash}
-ROUTER_MODEL=${ROUTER_MODEL:-gemini-2.5-flash-lite}
+LLM_MODEL=${LLM_MODEL:-gemini-3.8-flash}
+ROUTER_MODEL=${ROUTER_MODEL:-gemini-3.1-flash-lite}
 MIN_INSTANCES=${MIN_INSTANCES:-0}
 FIRESTORE_DB="(default)"
 AR_REPO=br
@@ -154,7 +154,13 @@ MCP_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub
 SERVER_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key SESSION_SECRET=session-secret \
   SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
 TRACING=false; [[ -n "${HAVE[langsmith-api-key]:-}" ]] && TRACING=true
-FALLBACK=""; [[ -n "${HAVE[openai-api-key]:-}" ]] && FALLBACK=";FALLBACK_PROVIDER=openai;FALLBACK_MODEL=${FALLBACK_MODEL:-gpt-4.1-mini}"
+# Backup model: FALLBACK_PROVIDER/FALLBACK_MODEL if given, else OpenAI when its key is stored.
+FALLBACK=""
+if [[ -n "${FALLBACK_PROVIDER:-}" ]]; then
+  FALLBACK=";FALLBACK_PROVIDER=$FALLBACK_PROVIDER;FALLBACK_MODEL=${FALLBACK_MODEL:?set FALLBACK_MODEL too}"
+elif [[ -n "${HAVE[openai-api-key]:-}" ]]; then
+  FALLBACK=";FALLBACK_PROVIDER=openai;FALLBACK_MODEL=${FALLBACK_MODEL:-gpt-4.1-mini}"
+fi
 
 # ---------------------------------------------------------------------------
 bold "4/9  Service account, Firestore, storage, image registry"

@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # --- LLM -------------------------------------------------------------
     llm_provider: Literal["gemini", "openai", "anthropic", "fake"] = "gemini"
-    llm_model: str = "gemini-2.5-flash"
+    llm_model: str = "gemini-3.8-flash"
     # Cheaper/faster model used for the guardrail router and the eval judge.
     router_model: str | None = None
     llm_temperature: float = 0.2
