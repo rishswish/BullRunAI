@@ -68,9 +68,11 @@ def get_news(ticker: Annotated[str, "Stock symbol"], limit: Annotated[int, "1-10
 @tool
 def search_filings(query: Annotated[str, "What to look for, phrased as a question or keywords"],
                    ticker: Annotated[str | None, "Restrict to one company's filings"] = None,
-                   form: Annotated[str | None, "'10-K' or '10-Q'"] = None) -> str:
-    """Search a company's latest SEC 10-K and 10-Q (risk factors, MD&A, business description,
-    guidance, segment data). Works for any US-listed company: one not searched before is
+                   form: Annotated[str | None, "'10-K', '10-Q' or '8-K'"] = None) -> str:
+    """Search a company's SEC filings: latest 10-K and 10-Q (risk factors, MD&A, business
+    description, guidance, segment data) and 8-Ks from the last ~4 months (earnings press
+    releases, acquisitions, executive changes; pass form='8-K' for the company's latest
+    announced results). Works for any US-listed company: one not searched before is
     fetched from EDGAR on the spot. Returns passages with source ids (S1, S2...) - cite them as [S1].
     Ids keep counting across searches in one answer, so always use the ids as returned."""
     return _j(_search_filings(query, ticker=ticker, form=form))

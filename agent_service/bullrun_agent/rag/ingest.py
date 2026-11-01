@@ -5,8 +5,9 @@
     python -m bullrun_agent.rag.ingest --upload gs://my-bucket/filings_index
     python -m bullrun_agent.rag.ingest --rebuild             # start from scratch
 
-For each company it keeps the latest 10-K and latest 10-Q. Only filings that are new
-since the last run are downloaded and embedded; superseded ones are dropped.
+For each company it keeps the latest 10-K, the latest 10-Q and 8-Ks from the last 120
+days (at most 6). Only filings that are new since the last run are downloaded and
+embedded; superseded 10-K/10-Qs and older 8-Ks are dropped.
 """
 from __future__ import annotations
 

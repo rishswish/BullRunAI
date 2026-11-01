@@ -125,7 +125,7 @@ def _embedder():
 
 
 def add_company(ticker: str) -> dict:
-    """Fetch and index a company's latest 10-K and 10-Q (the first time anyone asks about it)."""
+    """Fetch and index a company's latest 10-K, 10-Q and recent 8-Ks (the first time anyone asks)."""
     global _index
     from .edgar import ticker_map
     from .updater import refresh
@@ -137,7 +137,7 @@ def add_company(ticker: str) -> dict:
             return {"status": "already indexed"}
         if t not in ticker_map():
             return {"status": "not an SEC filer",
-                    "note": f"{t} has no SEC 10-K/10-Q (it may be an ETF, a fund or a non-US listing)."}
+                    "note": f"{t} has no SEC 10-K, 10-Q or 8-K filings (it may be an ETF, a fund or a non-US listing)."}
         for _ in range(3):
             new, changes = refresh(idx, [t], _embedder())
             if not changes:

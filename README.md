@@ -22,7 +22,7 @@ The original chatbot was a keyword filter in front of a single Gemini call. 2.0 
 - **Spade, a LangGraph research agent**: LLM guardrail router, tool-calling loop over
   quotes, news, SEC filings and the user's portfolio, per-thread memory, and
   **human-in-the-loop approval** before it edits a watchlist.
-- **Filings RAG**: 10-K/10-Q from SEC EDGAR, section-aware chunking, hybrid BM25 + dense
+- **Filings RAG**: 10-K, 10-Q and recent 8-Ks (earnings releases) from SEC EDGAR, section-aware chunking, hybrid BM25 + dense
   retrieval with Reciprocal Rank Fusion, answers cited as `[S1]` with links to the filing.
 - **BullRun MCP server**: the research tools as an MCP server (tools, resources, prompts),
   consumed by the agent over HTTP and usable from Claude Desktop or Cursor over stdio.

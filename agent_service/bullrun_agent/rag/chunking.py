@@ -1,4 +1,4 @@
-"""Section-aware chunking for 10-K / 10-Q text.
+"""Section-aware chunking for 10-K / 10-Q / 8-K text.
 
 Each "Item N." heading starts a section; text is labelled with the most recent
 heading, so repeated page headers or a table of contents never drop content.
@@ -26,6 +26,51 @@ TEN_Q = {  # (part, item)
     ("II", "5"): "Other Information",
 }
 TEN_Q_SKIP = {("I", "4"), ("II", "2"), ("II", "3"), ("II", "4"), ("II", "6")}
+
+
+# 8-K items worth searching ("2.02" = quarterly results). 9.01 is just the exhibit list.
+EIGHT_K = {
+    "1.01": "Material agreement", "1.02": "Agreement ended", "1.05": "Cybersecurity incident",
+    "2.01": "Acquisition or sale", "2.02": "Earnings results", "2.03": "New debt", "2.05": "Restructuring",
+    "2.06": "Impairment", "3.01": "Listing notice", "4.01": "Auditor change", "4.02": "Restatement",
+    "5.01": "Change in control", "5.02": "Executive or board change", "5.03": "Bylaws change",
+    "5.07": "Shareholder vote", "7.01": "Regulation FD disclosure", "8.01": "Other events",
+}
+EIGHT_K_SKIP = {"9.01"}
+EIGHT_K_ITEM_RE = re.compile(r"^\s*ITEM\s+(\d\.\d{2})\b", re.IGNORECASE | re.MULTILINE)
+EXHIBIT_RE = re.compile(r"^\[\[EXHIBIT (99(?:\.\d+)?)\]\]$", re.MULTILINE)
+# Legal "forward-looking statements" boilerplate in press releases reads like a risk list
+# and would crowd out the real Risk Factors on "what are the risks" questions.
+BOILERPLATE_RE = re.compile(r"forward[- ]looking statement|safe harbor", re.IGNORECASE)
+
+
+def useful_8k(items: str) -> bool:
+    """Skip 8-Ks that only attach exhibits or report a shareholder vote tally."""
+    codes = {c.strip() for c in (items or "").split(",") if c.strip()}
+    return bool(codes - {"9.01", "5.07"})
+
+
+def split_8k(text: str, items: str = "") -> list[tuple[str, str]]:
+    """Sections of an 8-K: each reported item, then each EX-99 exhibit appended by edgar.fetch_text."""
+    marks = sorted([(m.start(), "item", m.group(1)) for m in EIGHT_K_ITEM_RE.finditer(text)]
+                   + [(m.start(), "exhibit", m.group(1)) for m in EXHIBIT_RE.finditer(text)])
+    earnings = "2.02" in (items or "")
+    out: list[tuple[str, str]] = []
+    for i, (start, kind, code) in enumerate(marks):
+        end = marks[i + 1][0] if i + 1 < len(marks) else len(text)
+        body = text[start:end]
+        if kind == "item":
+            if code in EIGHT_K_SKIP:
+                continue
+            name = f"{EIGHT_K.get(code, 'Item')} (Item {code})"
+        else:
+            body = EXHIBIT_RE.sub("", body)
+            body = "\n\n".join(p for p in re.split(r"\n\s*\n", body) if not BOILERPLATE_RE.search(p))
+            name = f"{'Earnings release' if earnings else 'Press release'} (Ex. {code})"
+        body = body.strip()
+        if len(body) > 80:
+            out.append((name, body))
+    return out or ([("Full text", text)] if len(text.strip()) > 80 else [])
 
 
 @dataclass
@@ -105,10 +150,14 @@ def window(text: str, size: int = 1800, overlap: int = 200) -> list[str]:
 
 def chunk_filing(text: str, base_meta: dict, size: int = 1800, overlap: int = 200) -> list[Chunk]:
     form = str(base_meta.get("form", "10-K"))
+    eight_k = form.upper() == "8-K"
+    sections = split_8k(text, base_meta.get("items", "")) if eight_k else split_sections(text, form)
+    # a company can file two 8-Ks on one day, so those ids also carry the accession number
+    tag = f"-{base_meta.get('accession', '')[-6:]}" if eight_k else ""
     out: list[Chunk] = []
-    for s_idx, (section, body) in enumerate(split_sections(text, form)):
+    for s_idx, (section, body) in enumerate(sections):
         header = f"[{base_meta.get('ticker')} {form} filed {base_meta.get('filed')} | {section}]"
         for j, piece in enumerate(window(body, size, overlap)):
-            cid = f"{base_meta.get('ticker')}-{form}-{base_meta.get('filed')}-{s_idx}-{j}"
+            cid = f"{base_meta.get('ticker')}-{form}-{base_meta.get('filed')}{tag}-{s_idx}-{j}"
             out.append(Chunk(id=cid, text=f"{header}\n{piece}", meta={**base_meta, "section": section, "chunk": j}))
     return out

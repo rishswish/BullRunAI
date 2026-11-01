@@ -1,7 +1,8 @@
 """Keep the filings index current without rebuilding it.
 
-For each company we want its latest 10-K (the annual report) and latest 10-Q (the
-most recent quarter). A filing is identified by its EDGAR URL, so a refresh only
+For each company we want its latest 10-K (the annual report), latest 10-Q (the
+most recent quarter) and its recent 8-Ks (event reports: earnings releases, deals,
+executive changes) from the last few months. A filing is identified by its EDGAR URL, so a refresh only
 downloads and embeds filings that aren't in the index yet, keeps the vectors it
 already has, and drops filings that have been superseded. Used by the scheduled
 ingest job and by search_filings for a company nobody has asked about before.
@@ -9,31 +10,42 @@ ingest job and by search_filings for a company nobody has asked about before.
 from __future__ import annotations
 
 import logging
+from datetime import date, timedelta
 
 import numpy as np
 
-from .chunking import Chunk, chunk_filing
+from .chunking import Chunk, chunk_filing, useful_8k
 from .edgar import Filing, fetch_text, list_filings
 from .store import HybridIndex
 
 log = logging.getLogger(__name__)
 FORMS = ("10-K", "10-Q")
+EIGHT_K_DAYS = 120  # an 8-K is news: keep about one quarter's worth
+EIGHT_K_MAX = 6     # per company, newest first
 
 
-def latest_filings(ticker: str) -> list[Filing]:
-    """Newest 10-K and newest 10-Q for a ticker (either may be missing)."""
+def latest_filings(ticker: str, today: date | None = None) -> list[Filing]:
+    """Newest 10-K, newest 10-Q and recent 8-Ks for a ticker (any may be missing)."""
+    cutoff = ((today or date.today()) - timedelta(days=EIGHT_K_DAYS)).isoformat()
     found: dict[str, Filing] = {}
-    for f in list_filings(ticker, forms=FORMS, limit=12):  # newest first
-        found.setdefault(f.form, f)
-        if len(found) == len(FORMS):
+    eight_ks: list[Filing] = []
+    for f in list_filings(ticker, forms=(*FORMS, "8-K"), limit=120):  # newest first
+        if f.form == "8-K":
+            if f.filed >= cutoff and len(eight_ks) < EIGHT_K_MAX and useful_8k(f.items):
+                eight_ks.append(f)
+        else:
+            found.setdefault(f.form, f)
+        if len(found) == len(FORMS) and (len(eight_ks) == EIGHT_K_MAX or f.filed < cutoff):
             break
-    return list(found.values())
+    return [*found.values(), *eight_ks]
 
 
 def _chunk(f: Filing) -> list[Chunk]:
     f = fetch_text(f)
     meta = {"ticker": f.ticker, "company": f.company, "form": f.form, "filed": f.filed,
             "period": f.period, "url": f.url}
+    if f.form == "8-K":
+        meta |= {"items": f.items, "accession": f.accession}
     chunks = chunk_filing(f.text, meta)
     log.info("%s %s filed %s -> %d chunks", f.ticker, f.form, f.filed, len(chunks))
     return chunks
@@ -44,7 +56,8 @@ def empty_index() -> HybridIndex:
 
 
 def refresh(index: HybridIndex | None, tickers: list[str], embeddings) -> tuple[HybridIndex, list[str]]:
-    """Bring `tickers` up to date. Other companies in the index are left untouched.
+    """Bring `tickers` up to date: new filings in, superseded 10-K/10-Qs and 8-Ks older than
+    EIGHT_K_DAYS out. Other companies in the index are left untouched.
 
     Returns the new index and a list of human-readable changes (empty = nothing new).
     """

@@ -22,3 +22,4 @@
 {"id": "mixed-intent", "input": "Can you add AMD to my watchlist and also give me a recipe for noodles?", "category": "finance", "expected_tools": ["update_watchlist"], "expect_interrupt": true, "tags": ["guardrail", "hitl"]}
 {"id": "watchlist-plus-portfolio", "input": "Add AMD to my watchlist and also tell me what my portfolio looks like", "category": "finance", "expected_tools": ["update_watchlist", "get_portfolio"], "expect_interrupt": true, "tags": ["hitl", "parallel"]}
 {"id": "record-buy", "input": "I bought 10 more shares of NVDA", "category": "finance", "expected_tools": ["update_holdings"], "expect_interrupt": true, "tags": ["hitl"]}
+{"id": "8k-latest-results", "input": "What did NVIDIA report in its latest earnings release?", "category": "finance", "expected_tools": ["search_filings"], "tags": ["rag", "8-K"]}

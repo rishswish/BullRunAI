@@ -60,7 +60,8 @@ mcp = FastMCP(
         validate_token_resource=False,  # tokens are our own signed JWTs
     ) if oauth else None,
     instructions=("Market research tools from BullRun: live quotes, ticker news with sentiment, and "
-                  "hybrid search over SEC 10-K/10-Q filings with citations. Data marked source=demo is sample data."),
+                  "hybrid search over SEC 10-K/10-Q/8-K filings with citations. "
+                  "Data marked source=demo is sample data."),
     host="0.0.0.0",
     port=int(os.environ.get("PORT", 8765)),
     stateless_http=True,  # no sticky sessions needed -> scales horizontally on Cloud Run
@@ -84,8 +85,9 @@ def get_news(ticker: str, limit: int = 5) -> dict:
 
 @mcp.tool()
 def search_filings(query: str, ticker: str | None = None, form: str | None = None) -> dict:
-    """Hybrid (BM25 + embedding) search over each company's latest SEC 10-K and 10-Q. Any US-listed
-    ticker works (new ones are fetched from EDGAR on first use). Optional form filter ('10-K'/'10-Q').
+    """Hybrid (BM25 + embedding) search over each company's latest SEC 10-K and 10-Q and its 8-Ks
+    from the last ~4 months (earnings releases, deals, executive changes). Any US-listed ticker works
+    (new ones are fetched from EDGAR on first use). Optional form filter ('10-K', '10-Q' or '8-K').
     Each result has a source_id (S1..) and a citation with the EDGAR URL."""
     return _search_filings(query, ticker=ticker, form=form)
 

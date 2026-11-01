@@ -26,7 +26,7 @@ const uid = () => Math.random().toString(36).slice(2);
 const WELCOME = {
   id: 'welcome',
   role: 'bot',
-  text: "Hi! I'm **Spade**, BullRun's research agent. I can pull live quotes and news, search company 10-K/10-Q filings with citations, analyse your portfolio, and update your watchlist or holdings (with your approval).",
+  text: "Hi! I'm **Spade**, BullRun's research agent. I can pull live quotes and news, search company filings (10-K, 10-Q, 8-K) with citations, analyse your portfolio, and update your watchlist or holdings (with your approval).",
   time: now(),
 };
 
@@ -140,7 +140,7 @@ function Citations({ citations, text }) {
   const used = citations.filter((c) => (!cited.size || cited.has(c.id)) && !seen.has(c.id) && seen.add(c.id));
   const docs = [];
   for (const c of used) {
-    const key = `${c.ticker}|${c.form}|${c.filed}`;
+    const key = c.url || `${c.ticker}|${c.form}|${c.filed}`; // two 8-Ks can share a date
     let d = docs.find((x) => x.key === key);
     if (!d) docs.push((d = { key, title: `${c.ticker} ${c.form} filed ${c.filed}`, url: c.url, passages: [] }));
     d.passages.push(c);
