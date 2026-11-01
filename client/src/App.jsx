@@ -82,6 +82,8 @@ function AppContent({ user, profile, checkingProfile, updateProfile, handleLogou
                 ? <Portfolio isChatbotOpen={isChatbotOpen} setIsChatbotOpen={setIsChatbotOpen} user={user} />
                 : <Navigate to="/onboarding" replace />}
             />
+            {/* signing in from /login (or any page the app doesn't have) lands on the dashboard */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
         {!isOnboarding && (
