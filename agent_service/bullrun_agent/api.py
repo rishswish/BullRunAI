@@ -221,8 +221,11 @@ async def _stream(graph, payload, config: dict, thread_id: str) -> AsyncIterator
                              **usage, "latency_ms": round(1000 * (time.perf_counter() - started))}))
     except Exception as e:  # surface failures to the UI instead of a dead stream
         log.exception("agent stream failed run_id=%s", run_id)
-        yield _sse("error", {"message": "Spade hit an error. Please try again.", "detail": e.__class__.__name__,
-                             "run_id": run_id})
+        text = str(e)
+        busy = "429" in text or "RESOURCE_EXHAUSTED" in text or "rate limit" in text.lower()
+        msg = ("Spade is busy right now (model rate limit). Please try again in a minute."
+               if busy else "Spade hit an error. Please try again.")
+        yield _sse("error", {"message": msg, "detail": e.__class__.__name__, "run_id": run_id})
 
 
 @app.post("/api/agent/chat")
