@@ -9,6 +9,17 @@ import {
 import { AGENT_API_URL, streamAgent } from '../lib/agentStream';
 
 const THREAD_KEY = 'br_chat_thread';
+// Latency, tokens and trace id are for us, not users: shown locally, or on the live site with ?debug=1
+// (remembered in this browser; ?debug=0 turns it off).
+const DEV_INFO = (() => {
+  try {
+    const q = new URLSearchParams(window.location.search).get('debug');
+    if (q !== null) window.localStorage.setItem('br_debug', q === '1' ? '1' : '0');
+    return import.meta.env.DEV || window.localStorage.getItem('br_debug') === '1';
+  } catch {
+    return import.meta.env.DEV;
+  }
+})();
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const uid = () => Math.random().toString(36).slice(2);
 
@@ -183,8 +194,8 @@ function Bubble({ msg, onDecide, onRate }) {
         </div>
         <p className="text-[9px] text-gray-400 mt-0.5 px-1">
           {msg.time}
-          {msg.meta && ` · ${(msg.meta.latency_ms / 1000).toFixed(1)}s · ${msg.meta.usage.input_tokens + msg.meta.usage.output_tokens} tokens`}
-          {msg.runId && !msg.streaming && <span title={`Trace ${msg.runId}`}> · ref {msg.runId.slice(0, 8)}</span>}
+          {DEV_INFO && msg.meta && ` · ${(msg.meta.latency_ms / 1000).toFixed(1)}s · ${msg.meta.usage.input_tokens + msg.meta.usage.output_tokens} tokens`}
+          {DEV_INFO && msg.runId && !msg.streaming && <span title={`Trace ${msg.runId}`}> · ref {msg.runId.slice(0, 8)}</span>}
           <Feedback msg={msg} onRate={onRate} />
         </p>
       </div>
