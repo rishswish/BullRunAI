@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { useQueryClient } from '@tanstack/react-query';
 import remarkGfm from 'remark-gfm';
 import {
   MessageSquare, Send, ChevronRight, ChevronLeft, Loader2, Check, X, Plus,
@@ -208,6 +209,8 @@ function Chatbot({ isOpen, setIsOpen, user }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.token]);
 
+  const queryClient = useQueryClient();
+
   const patch = useCallback((id, fn) => {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...fn(m) } : m)));
   }, []);
@@ -231,6 +234,10 @@ function Chatbot({ isOpen, setIsOpen, user }) {
             ? { ...s, status: data.status === 'error' || data.summary?.startsWith('error') ? 'error' : 'done', summary: data.summary }
             : s)),
         }));
+        // Spade changed the watchlist: refresh the dashboard cards
+        if (data.name === 'update_watchlist' && data.summary === 'applied') {
+          queryClient.invalidateQueries({ queryKey: ['market-summary'] });
+        }
         break;
       case 'approval_required':
         patch(botId, () => ({ approval: { ...data, state: 'pending' }, streaming: false }));
@@ -247,7 +254,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
       default:
         break;
     }
-  }, [patch]);
+  }, [patch, queryClient]);
 
   const run = useCallback(async (path, body, botId) => {
     setBusy(true);
