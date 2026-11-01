@@ -158,6 +158,17 @@ Core infrastructure:
 
 ## Local Development
 
+**Whole stack on Windows, one command** (real keys from `agent_service\.env`, real Firestore):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev.ps1 -Setup   # first time
+powershell -ExecutionPolicy Bypass -File .\dev.ps1          # every time after
+```
+
+API on :5000, Spade on :8080, app on http://localhost:5173; Python and React changes reload on save.
+Deploy with `deploy/deploy.sh` once a change works locally.
+
+
 ### Frontend
 
 ```bash
