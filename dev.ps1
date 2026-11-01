@@ -27,9 +27,13 @@ function Add-DotEnv($name, $value) {
 
 if ($Setup) {
     Write-Host "Installing server deps into the agent venv..."
-    & $python -m pip install -q -r (Join-Path $root "agent_service\requirements.txt") flask flask-cors snaptrade-python-sdk pyjwt
+    & $python -m pip install flask flask-cors snaptrade-python-sdk pyjwt
+    if ($LASTEXITCODE -ne 0) { throw "pip install failed (see above)" }
+    & $python -m pip install -q -r (Join-Path $root "agent_service\requirements.txt")
+    if ($LASTEXITCODE -ne 0) { throw "pip install of agent requirements failed (see above)" }
     Write-Host "Installing client deps..."
-    Push-Location (Join-Path $root "client"); npm install; Pop-Location
+    Push-Location (Join-Path $root "client"); npm install; $ok = $LASTEXITCODE -eq 0; Pop-Location
+    if (-not $ok) { throw "npm install failed (see above)" }
     Write-Host "Signing gcloud in so local code can reach Firestore..."
     gcloud auth application-default login
     gcloud auth application-default set-quota-project bullrunai-rishabh
