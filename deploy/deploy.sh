@@ -231,10 +231,12 @@ fi
 COMMON=(--region="$REGION" --service-account="$SA_EMAIL" --quiet)
 
 # ---------------------------------------------------------------------------
-bold "6/9  Starting the SEC filings ingest job (runs in the background)"
+bold "6/9  SEC filings index job (refreshed daily; first build runs in the background)"
+# Incremental: keeps each company's latest 10-K + 10-Q, embeds only new filings, and also
+# covers every user's watchlist and holdings.
 gcloud run jobs deploy br-rag-ingest --image="$IMG/br-agent:latest" "${COMMON[@]}" \
-  --command=python --args="-m,bullrun_agent.rag.ingest,--per-ticker,1,--upload,$INDEX_URI,--tickers,${RAG_TICKERS// /,}" \
-  --set-env-vars="^;^EMBEDDING_PROVIDER=gemini;SEC_USER_AGENT=BullRunAI $ACCOUNT;INDEX_DIR=/tmp/filings_index" \
+  --command=python --args="-m,bullrun_agent.rag.ingest,--with-users,--upload,$INDEX_URI,--tickers,${RAG_TICKERS// /,}" \
+  --set-env-vars="^;^EMBEDDING_PROVIDER=gemini;SEC_USER_AGENT=BullRunAI $ACCOUNT;INDEX_DIR=/tmp/filings_index;INDEX_GCS_URI=$INDEX_URI;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB" \
   --set-secrets="GOOGLE_API_KEY=google-api-key:latest" \
   --memory=2Gi --cpu=1 --task-timeout=3600 --max-retries=1 >/dev/null
 if [[ -n "${REINGEST:-}" ]] || ! gcloud storage ls "$INDEX_URI/" >/dev/null 2>&1; then
@@ -249,14 +251,14 @@ bold "7/9  Deploying services"
 info "br-mcp ..."
 gcloud run deploy br-mcp --image="$IMG/br-agent:latest" "${COMMON[@]}" \
   --command=python --args="-m,bullrun_agent.mcp_server,--http" \
-  --set-env-vars="^;^ALLOW_DEMO_DATA=false;EMBEDDING_PROVIDER=gemini;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;MCP_PUBLIC_URL=$MCP_URL;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB" \
+  --set-env-vars="^;^ALLOW_DEMO_DATA=false;EMBEDDING_PROVIDER=gemini;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;MCP_PUBLIC_URL=$MCP_URL;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;SEC_USER_AGENT=BullRunAI $ACCOUNT" \
   --set-secrets="$MCP_SECRETS" --memory=1Gi --min-instances=0 --max-instances=2 \
   --allow-unauthenticated >/dev/null
 
 info "br-agent ..."
 # max-instances=1 because chat memory is in-process; set CHECKPOINT_DB_URL (Postgres) to scale out.
 gcloud run deploy br-agent --image="$IMG/br-agent:latest" "${COMMON[@]}" \
-  --set-env-vars="^;^ALLOW_DEMO_DATA=false;LLM_PROVIDER=gemini;LLM_MODEL=$LLM_MODEL;ROUTER_MODEL=$ROUTER_MODEL;EMBEDDING_PROVIDER=gemini;TOOLS_MODE=mcp;MCP_SERVER_URL=$MCP_URL/mcp;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;CORS_ORIGINS=$CLIENT_URL,http://localhost:5173;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;LANGSMITH_TRACING=$TRACING;LANGSMITH_PROJECT=bullrun-agent$FALLBACK" \
+  --set-env-vars="^;^ALLOW_DEMO_DATA=false;LLM_PROVIDER=gemini;LLM_MODEL=$LLM_MODEL;ROUTER_MODEL=$ROUTER_MODEL;EMBEDDING_PROVIDER=gemini;TOOLS_MODE=mcp;MCP_SERVER_URL=$MCP_URL/mcp;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;CORS_ORIGINS=$CLIENT_URL,http://localhost:5173;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;LANGSMITH_TRACING=$TRACING;LANGSMITH_PROJECT=bullrun-agent;SEC_USER_AGENT=BullRunAI $ACCOUNT$FALLBACK" \
   --set-secrets="$AGENT_SECRETS" --memory=1Gi --cpu=1 --timeout=300 --concurrency=40 \
   --min-instances="$MIN_INSTANCES" --max-instances=1 --cpu-boost --allow-unauthenticated >/dev/null
 
@@ -297,6 +299,7 @@ schedule() {  # name job cron
 }
 schedule br-global-report br-global-agent "0 7-19/2 * * 1-5"
 schedule br-personal-report br-personal-agent "30 6 * * 1-5"
+schedule br-filings-refresh br-rag-ingest "15 18 * * 1-5"  # after the close, when most 10-Qs are out
 
 if [[ -z "${FIRST_REPORT_DONE:-}" ]]; then
   info "generating the first market report now (1-3 min) so the dashboard isn't empty ..."

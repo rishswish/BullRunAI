@@ -5,6 +5,7 @@ from pathlib import Path
 # Offline mode for every test: scripted LLM, hashed embeddings, demo data, no auth.
 os.environ.update({"LLM_PROVIDER": "fake", "EMBEDDING_PROVIDER": "hash", "AUTH_DISABLED": "true",
                    "POLYGON_API_KEY": "", "FIREBASE_SERVICE_ACCOUNT": "", "PROJECT_ID": "", "CHECKPOINT_DB_URL": "",
+                   "ON_DEMAND_FILINGS": "false",
                    "INDEX_DIR": str(Path(__file__).parent / "_no_index")})
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

@@ -1,10 +1,12 @@
-"""Build the filings index.
+"""Keep the filings index up to date (run daily by Cloud Scheduler).
 
-    python -m bullrun_agent.rag.ingest --tickers NVDA AAPL MSFT TSLA AMZN --per-ticker 2
+    python -m bullrun_agent.rag.ingest                       # refresh the default companies
+    python -m bullrun_agent.rag.ingest --with-users          # + every user's watchlist and holdings
     python -m bullrun_agent.rag.ingest --upload gs://my-bucket/filings_index
+    python -m bullrun_agent.rag.ingest --rebuild             # start from scratch
 
-Fetches the latest 10-K/10-Q per ticker from EDGAR, chunks by section, embeds,
-and writes vectors.npy + chunks.jsonl to INDEX_DIR (optionally uploads to GCS).
+For each company it keeps the latest 10-K and latest 10-Q. Only filings that are new
+since the last run are downloaded and embedded; superseded ones are dropped.
 """
 from __future__ import annotations
 
@@ -17,9 +19,6 @@ from pathlib import Path
 
 from ..config import get_settings
 from ..llm import get_embeddings
-from .chunking import chunk_filing
-from .edgar import fetch_text, list_filings
-from .store import HybridIndex
 
 DEFAULT_TICKERS = ["NVDA", "AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "META", "AMD"]
 
@@ -65,50 +64,60 @@ class ThrottledEmbeddings:
         return self.base.embed_query(text)
 
 
+def user_tickers(limit: int = 60) -> list[str]:
+    """Tickers on users' watchlists and in their holdings, most common first."""
+    from collections import Counter
+
+    from ..data_sources import get_user_store
+
+    store = get_user_store()
+    if not hasattr(store, "db"):
+        return []
+    counts: Counter = Counter()
+    for doc in store.db.collection("users").stream():
+        d = doc.to_dict() or {}
+        counts.update((d.get("onboarding") or {}).get("watchlist") or [])
+        counts.update(h.get("symbol") for h in d.get("manual_holdings") or [] if h.get("symbol"))
+    return [t.upper() for t, _ in counts.most_common(limit) if t and re.fullmatch(r"[A-Za-z.]{1,6}", t)]
+
+
 def main() -> None:
+    from . import get_index, publish, set_index
+    from .updater import refresh
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--tickers", nargs="+", default=DEFAULT_TICKERS)
-    ap.add_argument("--per-ticker", type=int, default=1, help="filings per ticker (most recent first)")
-    ap.add_argument("--out", type=Path, default=None)
-    ap.add_argument("--upload", default=None, help="gs://bucket/prefix to upload the index to")
+    ap.add_argument("--with-users", action="store_true", help="also cover users' watchlists and holdings")
+    ap.add_argument("--rebuild", action="store_true", help="ignore the existing index")
+    ap.add_argument("--upload", default=None, help="gs://bucket/prefix (defaults to INDEX_GCS_URI)")
     args = ap.parse_args()
 
     s = get_settings()
-    out = args.out or Path(s.index_dir)
-    chunks = []
-    manifest = []
-    for t in args.tickers:
-        try:
-            filings = list_filings(t, limit=args.per_ticker)
-        except KeyError:
-            logging.warning("unknown ticker %s, skipping", t)
-            continue
-        for f in filings:
-            f = fetch_text(f)
-            meta = {"ticker": f.ticker, "company": f.company, "form": f.form, "filed": f.filed,
-                    "period": f.period, "url": f.url}
-            cs = chunk_filing(f.text, meta)
-            chunks.extend(cs)
-            manifest.append({**meta, "chunks": len(cs)})
-            logging.info("%s %s %s -> %d chunks", f.ticker, f.form, f.filed, len(cs))
-
-    logging.info("embedding %d chunks with %s/%s", len(chunks), s.embedding_provider, s.embedding_model)
-    index = HybridIndex.build(chunks, ThrottledEmbeddings(get_embeddings(s)), batch=len(chunks) or 1)
-    index.save(out)
-    (out / "manifest.json").write_text(json.dumps({"embedding_provider": s.embedding_provider,
-                                                   "embedding_model": s.embedding_model,
-                                                   "filings": manifest}, indent=2))
-    logging.info("saved index to %s", out)
-
     if args.upload:
-        from google.cloud import storage
+        s.index_gcs_uri = args.upload
+    existing = None if args.rebuild else get_index()
+    tickers = set(args.tickers) | set(existing.tickers if existing else [])
+    if args.with_users:
+        try:
+            tickers |= set(user_tickers())
+        except Exception as e:  # Firestore down shouldn't stop the default refresh
+            logging.warning("could not read user tickers: %s", e)
+    logging.info("refreshing %d companies: %s", len(tickers), ", ".join(sorted(tickers)))
 
-        bucket_name, _, prefix = args.upload.removeprefix("gs://").partition("/")
-        bucket = storage.Client().bucket(bucket_name)
-        for name in ("vectors.npy", "chunks.jsonl", "manifest.json"):
-            bucket.blob(f"{prefix.rstrip('/')}/{name}").upload_from_filename(out / name)
-        logging.info("uploaded index to %s", args.upload)
+    index, changes = refresh(existing, sorted(tickers),
+                             ThrottledEmbeddings(get_embeddings(s), per_minute=s.embed_per_minute))
+    if not changes:
+        logging.info("no new filings; index unchanged (%d chunks)", len(index.chunks))
+        return
+    for c in changes:
+        logging.info(c)
+    if not publish(index):
+        raise SystemExit("index changed while refreshing (an on-demand add?); the next run will pick it up")
+    set_index(index)
+    (Path(s.index_dir) / "manifest.json").write_text(json.dumps(
+        {"embedding_model": s.embedding_model, "tickers": index.tickers, "changes": changes}, indent=2))
+    logging.info("published index: %d chunks, %d companies", len(index.chunks), len(index.tickers))
 
 
 if __name__ == "__main__":

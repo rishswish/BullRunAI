@@ -83,8 +83,9 @@ def get_news(ticker: str, limit: int = 5) -> dict:
 
 @mcp.tool()
 def search_filings(query: str, ticker: str | None = None, form: str | None = None) -> dict:
-    """Hybrid (BM25 + embedding) search over SEC 10-K/10-Q filings. Optional ticker and form
-    ('10-K'/'10-Q') filters. Each result has a source_id (S1..) and a citation with the EDGAR URL."""
+    """Hybrid (BM25 + embedding) search over each company's latest SEC 10-K and 10-Q. Any US-listed
+    ticker works (new ones are fetched from EDGAR on first use). Optional form filter ('10-K'/'10-Q').
+    Each result has a source_id (S1..) and a citation with the EDGAR URL."""
     return _search_filings(query, ticker=ticker, form=form)
 
 

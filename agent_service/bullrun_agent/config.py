@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # --- RAG ----------------------------------------------------------------
     index_dir: Path = SERVICE_DIR / "data" / "filings_index"
     index_gcs_uri: str | None = None  # e.g. gs://br-prod-rag/filings_index
+    index_reload_seconds: int = 300  # how often to check for a newer published index
+    on_demand_filings: bool = True  # index a company's filings the first time someone asks about it
+    embed_per_minute: int = 600  # embedding throttle (free Gemini tier needs ~90)
     retrieval_k: int = 6
 
     # --- Agent / API ----------------------------------------------------------
