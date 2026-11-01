@@ -271,7 +271,7 @@ done
 
 # ---------------------------------------------------------------------------
 bold "8/9  Report jobs + schedules"
-JOB_ENV="PROJECT_ID=$PROJECT_ID,FIRESTORE_DATABASE=$FIRESTORE_DB"
+JOB_ENV="PROJECT_ID=$PROJECT_ID,FIRESTORE_DATABASE=$FIRESTORE_DB,GLOBAL_REPORT_MODEL=$LLM_MODEL,PERSONAL_REPORT_MODEL=$LLM_MODEL"
 gcloud run jobs deploy br-global-agent --image="$IMG/br-global-agent:latest" "${COMMON[@]}" \
   --set-env-vars="$JOB_ENV" --set-secrets="GOOGLE_API_KEY=google-api-key:latest" \
   --memory=1Gi --task-timeout=900 --max-retries=1 >/dev/null
