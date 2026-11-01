@@ -7,8 +7,8 @@ Two families:
     the authenticated user's identity, which arrives via RunnableConfig and is never
     something the model can choose or spoof through tool arguments.
 
-`update_watchlist` writes data, so it pauses the graph with `interrupt()` and only
-proceeds once the user approves in the UI (human-in-the-loop).
+`update_watchlist` and `update_holdings` write data, so they pause the graph with
+`interrupt()` and only proceed once the user approves in the UI (human-in-the-loop).
 """
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from typing import Annotated
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, tool
 from langgraph.types import interrupt
+from pydantic import BaseModel, Field
 
 from . import data_sources as ds
 from .rag import search_filings as _search_filings
@@ -70,7 +71,8 @@ def search_filings(query: Annotated[str, "What to look for, phrased as a questio
                    form: Annotated[str | None, "'10-K' or '10-Q'"] = None) -> str:
     """Search a company's latest SEC 10-K and 10-Q (risk factors, MD&A, business description,
     guidance, segment data). Works for any US-listed company: one not searched before is
-    fetched from EDGAR on the spot. Returns passages with source ids S1..Sn - cite them as [S1]."""
+    fetched from EDGAR on the spot. Returns passages with source ids (S1, S2...) - cite them as [S1].
+    Ids keep counting across searches in one answer, so always use the ids as returned."""
     return _j(_search_filings(query, ticker=ticker, form=form))
 
 
@@ -112,7 +114,93 @@ def update_watchlist(config: RunnableConfig,
     return _j({"status": "applied", **apply_watchlist_change(email, add, remove)})
 
 
-USER_TOOLS: list[BaseTool] = [get_portfolio, update_watchlist]
+def _num(x: float) -> float | int:
+    return int(x) if float(x).is_integer() else round(x, 4)
+
+
+class Trade(BaseModel):
+    symbol: str = Field(description="Ticker bought or sold, e.g. NVDA")
+    shares: float = Field(description="Shares traded: positive if bought, negative if sold")
+    price: float | None = Field(None, description="Price per share paid/received, if the user said")
+
+
+def plan_holdings_change(email: str, trades: list[dict]) -> dict:
+    """Work out trades against the user's manual holdings without saving anything.
+    Returns {"error": ...} or the before/after of each position, for the user to approve."""
+    if not trades:
+        return {"error": "No trades given"}
+    user = ds.get_user_store().get_user(email)
+    if user.get("snaptrade_user_id"):
+        return {"error": "This account's holdings come from a connected brokerage and update from there; "
+                         "they can't be edited by hand."}
+    holdings = [dict(h) for h in user.get("manual_holdings") or []]
+    changes = []
+    for t in trades:
+        symbol, shares, price = t.get("symbol", ""), float(t.get("shares") or 0), t.get("price")
+        sym = (_clean([symbol]) or [None])[0]
+        if not sym:
+            return {"error": f"'{symbol}' is not a valid ticker"}
+        if not shares or abs(shares) > 1e7:
+            return {"error": f"Give a non-zero number of {sym} shares (positive = bought, negative = sold)"}
+        if price is not None and price <= 0:
+            return {"error": "Price per share must be positive"}
+        price_source = "given"
+        if price is None:
+            q = ds.get_quote(sym)
+            if not q.get("price") or q.get("source") in ("none", None):
+                return {"error": f"Couldn't get a current price for {sym}; ask the user what they paid per share"}
+            price, price_source = float(q["price"]), "current price"
+
+        pos = next((h for h in holdings if h["symbol"] == sym), None)
+        qty = float(pos["quantity"]) if pos else 0.0
+        avg = pos.get("avgCost") if pos else None
+        before = {"quantity": _num(qty), "avgCost": avg} if pos else None
+        if shares > 0:
+            new_qty = qty + shares
+            # weighted average cost; stays unknown if the old position had none
+            new_avg = price if qty == 0 else (qty * avg + shares * price) / new_qty if avg else None
+        else:
+            if abs(shares) > qty + 1e-9:
+                return {"error": f"The user holds {_num(qty)} {sym} in manual holdings, so can't sell {_num(-shares)}"}
+            new_qty, new_avg = qty + shares, avg  # selling doesn't change what the rest cost
+        if pos is None and len(holdings) >= 50:
+            return {"error": "Manual holdings are limited to 50 positions"}
+
+        after = None if new_qty <= 1e-9 else {"quantity": _num(new_qty),
+                                              "avgCost": round(new_avg, 4) if new_avg else None}
+        if pos is None:
+            holdings.append({"symbol": sym, **after})
+        elif after is None:
+            holdings.remove(pos)
+        else:
+            pos.update(after)
+        changes.append({"symbol": sym, "action": "buy" if shares > 0 else "sell", "shares": _num(abs(shares)),
+                        "price": round(price, 4), "price_source": price_source, "before": before, "after": after})
+    return {"changes": changes, "holdings": holdings}
+
+
+@tool
+def update_holdings(config: RunnableConfig,
+                    trades: Annotated[list[Trade], "One entry per stock bought or sold"]) -> str:
+    """Record trades the user says they made ("I bought 10 more NVDA", "sold 5 TSLA at 250",
+    "bought 10 NVDA and 10 TSLA") in their manually entered holdings. Updates share counts and
+    average cost; with no price, the current market price is used. Put all trades from one message
+    in a single call. Call it directly; the user approves before anything is saved. Cash is not changed."""
+    email = _user(config)
+    plan = plan_holdings_change(email, [t.model_dump() if isinstance(t, BaseModel) else dict(t) for t in trades])
+    if plan.get("error"):
+        return _j(plan)
+    holdings = plan.pop("holdings")
+    lines = [f"{'Bought' if c['action'] == 'buy' else 'Sold'} {c['shares']} {c['symbol']} at ${c['price']:,.2f}"
+             for c in plan["changes"]]
+    decision = interrupt({"type": "approve_holdings", **plan, "message": "; ".join(lines) + "?"})
+    if not (isinstance(decision, dict) and decision.get("approved")):
+        return _j({"status": "cancelled", "reason": "User declined the change"})
+    ds.get_user_store().set_manual_holdings(email, holdings)
+    return _j({"status": "applied", **plan, "note": "Cash balance was not changed."})
+
+
+USER_TOOLS: list[BaseTool] = [get_portfolio, update_watchlist, update_holdings]
 
 
 async def load_tools(mode: str = "local", mcp_url: str | None = None) -> list[BaseTool]:

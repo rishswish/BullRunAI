@@ -226,3 +226,21 @@ async def test_two_part_request_waits_for_approval_then_answers_both():
     out = await g.ainvoke(Command(resume={"approved": False}), cfg)  # declining still answers the read
     results = {m.name: json.loads(m.content) for m in out["messages"] if isinstance(m, ToolMessage)}
     assert results["update_watchlist"]["status"] == "cancelled" and "positions" in results["get_portfolio"]
+
+
+def test_two_filing_searches_get_distinct_source_ids():
+    """Two searches in one answer: the second continues at S7 instead of reusing S1..S6."""
+    from langchain_core.messages import HumanMessage
+
+    from bullrun_agent.graph.builder import number_sources
+
+    def search(i, n):
+        body = {"results": [{"source_id": f"S{k + 1}", "text": "x"} for k in range(n)]}
+        return ToolMessage(json.dumps(body), name="search_filings", tool_call_id=f"c{i}")
+
+    earlier = [HumanMessage("old question"), search(0, 6), HumanMessage("Netflix risks and competition?")]
+    first = number_sources(earlier, [search(1, 6), search(2, 3)])  # two searches in parallel
+    ids = [r["source_id"] for m in first for r in json.loads(m.content)["results"]]
+    assert ids == [f"S{k}" for k in range(1, 10)]  # last turn's S1-S6 don't count
+    later = number_sources([*earlier, *first], [search(3, 2)])  # a third search, next step
+    assert [r["source_id"] for r in json.loads(later[0].content)["results"]] == ["S10", "S11"]

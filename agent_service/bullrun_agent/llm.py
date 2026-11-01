@@ -131,6 +131,11 @@ class ScriptedChatModel(BaseChatModel):
             if name in want:
                 calls.append({"name": name, "args": args, "id": f"call_{len(calls)}_{name}", "type": "tool_call"})
 
+        trade = re.search(r"\b(bought|sold|purchased)\b\D*?(\d+(?:\.\d+)?)", t)
+        if trade and tickers:
+            sign = -1 if trade.group(1) == "sold" else 1
+            add("update_holdings", {"trades": [{"symbol": tickers[0], "shares": sign * float(trade.group(2))}]})
+            return calls
         if "add" in t and "watchlist" in t and tickers:
             add("update_watchlist", {"add": tickers[:3], "remove": []})
             return calls

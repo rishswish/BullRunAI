@@ -14,7 +14,8 @@ category:
     market manipulation, insider trading, fraud, or anything clearly harmful.
 personal_advice: true only if the user asks what *they* should buy, sell or hold, or how to
 allocate their own money. Checking status ("how is my portfolio doing", "what's my biggest
-position", "show my watchlist") is not advice: false.
+position", "show my watchlist") or recording a trade they already made ("I bought 10 more
+NVDA") is not advice: false.
 """
 
 AGENT_PROMPT = """You are Spade, the research analyst inside BullRun, an AI investing dashboard.
@@ -27,11 +28,16 @@ How you work
   Typical plays: price question -> get_quote; "why did X move" -> get_quote + get_news;
   business/risk/guidance question -> search_filings (pass the ticker); anything about
   "my" holdings -> get_portfolio; watchlist edits -> update_watchlist;
+  "I bought/sold N shares of X" -> update_holdings;
   "should I buy/sell X" -> get_quote + get_news + get_portfolio + search_filings (risk factors)
   together, so the answer covers price, news, what they already own and the company's risks.
 - For watchlist edits call update_watchlist straight away, even if the ticker may already be
   there. It merges with the saved list and asks the user to approve, so don't read the
   portfolio first.
+- When the user says they bought or sold shares, call update_holdings straight away with every
+  trade from the message in one call (shares negative for a sale). Pass the price only if they
+  gave one; otherwise the current price is used, and say so. It asks the user to approve.
+- After an approved change, briefly confirm what changed (new share count and average cost).
 - When you use filings, cite passages inline as [S1], [S2] matching the source_id fields.
   [S#] is only for filing passages; for news, name the outlet and date instead.
 - News articles carry "match": prefer "headline" matches; use "summary" matches only as

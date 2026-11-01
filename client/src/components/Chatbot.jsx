@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import remarkGfm from 'remark-gfm';
 import {
   MessageSquare, Send, ChevronRight, ChevronLeft, Loader2, Check, X, Plus,
-  LineChart, Newspaper, FileText, Briefcase, ListPlus, AlertTriangle, ThumbsUp, ThumbsDown, History, Trash2,
+  LineChart, Newspaper, FileText, Briefcase, ListPlus, ArrowLeftRight, AlertTriangle, ThumbsUp, ThumbsDown, History, Trash2,
 } from 'lucide-react';
 import { AGENT_API_URL, streamAgent } from '../lib/agentStream';
 
@@ -26,7 +26,7 @@ const uid = () => Math.random().toString(36).slice(2);
 const WELCOME = {
   id: 'welcome',
   role: 'bot',
-  text: "Hi! I'm **Spade**, BullRun's research agent. I can pull live quotes and news, search company 10-K/10-Q filings with citations, analyse your portfolio, and update your watchlist (with your approval).",
+  text: "Hi! I'm **Spade**, BullRun's research agent. I can pull live quotes and news, search company 10-K/10-Q filings with citations, analyse your portfolio, and update your watchlist or holdings (with your approval).",
   time: now(),
 };
 
@@ -35,6 +35,7 @@ const SUGGESTIONS = [
   'Why is NVDA moving?',
   "What risks does AAPL flag in its 10-K?",
   'Add AMD to my watchlist',
+  'I bought 10 more NVDA',
 ];
 
 const TOOL_META = {
@@ -44,7 +45,28 @@ const TOOL_META = {
   search_filings: { icon: FileText, label: (a) => `Searching ${a?.ticker ? a.ticker + ' ' : ''}filings` },
   get_portfolio: { icon: Briefcase, label: () => 'Reading your portfolio' },
   update_watchlist: { icon: ListPlus, label: () => 'Watchlist update' },
+  update_holdings: { icon: ArrowLeftRight, label: () => 'Holdings update' },
 };
+
+const money = (n) => (n == null ? '—' : `$${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+const sharesText = (p) => (p ? `${p.quantity} sh · avg ${money(p.avgCost)}` : 'none');
+
+function HoldingsChanges({ changes }) {
+  return (
+    <div className="space-y-1">
+      {(changes || []).map((c) => (
+        <div key={c.symbol}>
+          <div>
+            {c.action === 'buy' ? 'Bought' : 'Sold'} <b>{c.shares} {c.symbol}</b> at <b>{money(c.price)}</b>
+            {c.price_source === 'current price' && <span className="italic"> (current price)</span>}
+          </div>
+          <div className="text-amber-800">{sharesText(c.before)} → <b>{c.after ? sharesText(c.after) : 'sold out'}</b></div>
+        </div>
+      ))}
+      <div className="text-amber-700 italic">Cash balance is not changed.</div>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Presentational pieces
@@ -80,9 +102,18 @@ function ApprovalCard({ approval, onDecide }) {
   const pending = approval.state === 'pending';
   return (
     <div className="mt-2 border border-amber-200 bg-amber-50 rounded-md p-2 text-[11px] text-amber-900">
-      <div className="font-semibold mb-1">Approve watchlist change?</div>
-      {approval.add?.length > 0 && <div>Add: <b>{approval.add.join(', ')}</b></div>}
-      {approval.remove?.length > 0 && <div>Remove: <b>{approval.remove.join(', ')}</b></div>}
+      {approval.type === 'approve_holdings' ? (
+        <>
+          <div className="font-semibold mb-1">Update your holdings?</div>
+          <HoldingsChanges changes={approval.changes} />
+        </>
+      ) : (
+        <>
+          <div className="font-semibold mb-1">Approve watchlist change?</div>
+          {approval.add?.length > 0 && <div>Add: <b>{approval.add.join(', ')}</b></div>}
+          {approval.remove?.length > 0 && <div>Remove: <b>{approval.remove.join(', ')}</b></div>}
+        </>
+      )}
       {pending ? (
         <div className="flex gap-1.5 mt-2">
           <button onClick={() => onDecide(true)}
@@ -290,6 +321,11 @@ function Chatbot({ isOpen, setIsOpen, user }) {
         }));
         // Spade changed the watchlist: refresh the dashboard cards
         if (data.name === 'update_watchlist' && data.summary === 'applied') {
+          queryClient.invalidateQueries({ queryKey: ['market-summary'] });
+        }
+        // ...or the holdings: refresh the Portfolio page and dashboard too
+        if (data.name === 'update_holdings' && data.summary === 'applied') {
+          queryClient.invalidateQueries({ queryKey: ['portfolio-summary'] });
           queryClient.invalidateQueries({ queryKey: ['market-summary'] });
         }
         break;

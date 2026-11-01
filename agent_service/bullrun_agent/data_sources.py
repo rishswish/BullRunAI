@@ -297,6 +297,7 @@ def get_news(ticker: str, limit: int = 5, settings: Settings | None = None) -> d
 class UserStore(Protocol):
     def get_user(self, email: str) -> dict: ...
     def set_watchlist(self, email: str, tickers: list[str]) -> list[str]: ...
+    def set_manual_holdings(self, email: str, holdings: list[dict]) -> None: ...
     def mark_mcp_connected(self, email: str, client_name: str | None = None) -> None: ...
 
 
@@ -328,6 +329,11 @@ class DemoUserStore:
         with self._lock:
             user["watchlist"] = tickers
         return tickers
+
+    def set_manual_holdings(self, email: str, holdings: list[dict]) -> None:
+        user = self.get_user(email)
+        with self._lock:
+            user["manual_holdings"] = holdings
 
     def mark_mcp_connected(self, email: str, client_name: str | None = None) -> None:
         user = self.get_user(email)
@@ -363,6 +369,11 @@ class FirestoreUserStore:
         # merge=True deep-merges maps, so other onboarding answers are preserved.
         self.db.collection("users").document(self._key(email)).set({"onboarding": {"watchlist": tickers}}, merge=True)
         return tickers
+
+    def set_manual_holdings(self, email: str, holdings: list[dict]) -> None:
+        # Same field and shape the Portfolio page's "Manage holdings" form saves.
+        self.db.collection("users").document(self._key(email)).set(
+            {"manual_holdings": holdings, "updated_at": datetime.now(timezone.utc).isoformat()}, merge=True)
 
     def mark_mcp_connected(self, email: str, client_name: str | None = None) -> None:
         # Shown on the app's "Use in Claude" panel so people can see the connection worked.

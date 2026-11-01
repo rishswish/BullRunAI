@@ -23,7 +23,7 @@ flowchart LR
       AG <--> TN[tools<br/>ToolNode]
       AG --> CP[compliance<br/>disclaimer]
     end
-    TN --> UT["user tools (in-process)<br/>get_portfolio<br/>update_watchlist ⏸ interrupt()"]
+    TN --> UT["user tools (in-process)<br/>get_portfolio<br/>update_watchlist ⏸ interrupt()<br/>update_holdings ⏸ interrupt()"]
     G -.checkpoints.-> MEM[(Postgres / memory<br/>thread state)]
   end
 
@@ -47,13 +47,13 @@ flowchart LR
 |---|---|---|
 | **Agent orchestration** | LangGraph `StateGraph`: guardrail → agent ⇄ tools → compliance; loop guard on tool steps | `bullrun_agent/graph/builder.py` |
 | **Tool calling** | 5 typed LangChain tools; parallel calls; tool errors returned to the model, not thrown | `bullrun_agent/tools.py` |
-| **Human-in-the-loop** | `update_watchlist` calls `interrupt()`; UI shows Approve/Decline; `/resume` sends `Command(resume=...)` | `tools.py`, `api.py`, `Chatbot.jsx` |
+| **Human-in-the-loop** | `update_watchlist` and `update_holdings` ("I bought 10 more NVDA": new share count + average cost) call `interrupt()`; UI shows Approve/Decline with the before → after; `/resume` sends `Command(resume=...)` | `tools.py`, `api.py`, `Chatbot.jsx` |
 | **Memory** | Multiple chats per user, each with its own memory; transcripts saved to Firestore and replayed when a thread isn't live (Cloud Run scales to zero). Per-thread checkpointer (InMemorySaver → `AsyncPostgresSaver` via `CHECKPOINT_DB_URL`); history trimmed to a token budget (current turn always kept) | `graph/builder.py` |
 | **Guardrails** | LLM router with Pydantic structured output (finance / off_topic / unsafe + advice flag) replaces the 90-keyword regex; deterministic disclaimer node | `graph/` |
 | **RAG** | EDGAR ingest (daily incremental refresh: latest 10-K + 10-Q per company, users' tickers included, any other company indexed on first question) → section-aware chunking (Item 1A, Item 7…) → hybrid BM25 + dense retrieval fused with Reciprocal Rank Fusion → `[S#]` citations with filing URLs | `bullrun_agent/rag/` |
 | **MCP** | FastMCP server with tools, resources and prompts; OAuth 2.1 (dynamic client registration, PKCE, Google sign-in) so Claude can use account tools as the signed-in user; agent consumes it via `langchain-mcp-adapters`; same server works over stdio for Claude Desktop | `bullrun_agent/mcp_server.py` |
 | **Streaming** | SSE events: `route`, `token`, `tool_start`, `tool_end`, `approval_required`, `final` (with citations, tokens, latency) | `api.py`, `client/src/lib/agentStream.js` |
-| **Evals** | 23-case golden set (routing, tool selection, parallelism, disclaimer, HITL, citations) + LLM-as-judge groundedness; retrieval hit@k / MRR; CI quality gates | `evals/` |
+| **Evals** | 24-case golden set (routing, tool selection, parallelism, disclaimer, HITL, citations) + LLM-as-judge groundedness; retrieval hit@k / MRR; CI quality gates | `evals/` |
 | **Traceability** | Each answer gets a run ID that is also its LangSmith trace ID; returned to the UI, written to JSON logs, and linked to 👍/👎 feedback (`POST /api/agent/feedback`) | `api.py`, `Chatbot.jsx` |
 | **LLMOps** | Provider-agnostic factory (Gemini / OpenAI / Anthropic / offline fake) with automatic failover to a backup provider, LangSmith tracing, per-request token + latency, per-user rate limit | `llm.py`, `api.py` |
 | **Security** | Google ID-token auth; threads namespaced by user; identity injected via `RunnableConfig` (the model can't pick whose portfolio to read); markdown rendered without raw HTML | `api.py`, `tools.py` |
@@ -100,7 +100,7 @@ Ask Claude *"Use the analyze_ticker prompt for NVDA"* and it will call BullRun's
 
 The deployed MCP server is an OAuth-protected remote server. In Claude: **Settings → Connectors →
 Add custom connector**, URL `https://<br-mcp url>/mcp`. Claude registers itself, sends you to Google
-sign-in, and from then on `get_portfolio`, `get_watchlist` and `update_watchlist` act on *your* BullRun
+sign-in, and from then on `get_portfolio`, `get_watchlist`, `update_watchlist` and `update_holdings` act on *your* BullRun
 data. Your identity comes from the token, never from a tool argument, and the agent service reaches the
 same server with a service token that can't touch any account. See `bullrun_agent/mcp_auth.py`.
 

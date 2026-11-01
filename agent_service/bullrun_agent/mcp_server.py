@@ -3,7 +3,8 @@ Model Context Protocol, so any MCP client can use them.
 
 Primitives exposed
   tools      get_quote, get_news, search_filings, compare_tickers,
-             get_portfolio*, get_watchlist*, update_watchlist*
+             get_portfolio*, get_watchlist*, update_watchlist*,
+             update_holdings*
   resources  bullrun://filings/index  (what's in the RAG index)
              bullrun://watchlist      (the user's watchlist)*
   prompts    analyze_ticker, earnings_risk_review
@@ -132,6 +133,22 @@ def update_watchlist(add: list[str] | None = None, remove: list[str] | None = No
     if not add and not remove:
         return {"error": "No valid tickers given"}
     return {"status": "applied", **apply_watchlist_change(_user_email(), add, remove)}
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False))
+def update_holdings(trades: list[dict]) -> dict:
+    """Record trades the user made in their BullRun manual holdings. trades is a list of
+    {"symbol": "NVDA", "shares": 10, "price": 180.5}: shares negative for a sale; price per share
+    is optional (current price if left out). Updates share counts and average cost; cash is not
+    changed. Confirm the trades with the user before calling."""
+    from .tools import plan_holdings_change
+
+    email = _user_email()
+    plan = plan_holdings_change(email, trades)
+    if plan.get("error"):
+        return plan
+    ds.get_user_store().set_manual_holdings(email, plan.pop("holdings"))
+    return {"status": "applied", **plan}
 
 
 # ---------------------------------------------------------------------------

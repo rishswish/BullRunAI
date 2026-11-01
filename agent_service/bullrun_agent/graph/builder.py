@@ -9,8 +9,9 @@
                 cheap model, temperature 0.
 * agent       - tool-calling LLM over the thread's history, trimmed to a token budget.
 * tools       - ToolNode, executes parallel tool calls, turns exceptions into
-                ToolMessages the model can recover from. `update_watchlist`
-                pauses the whole graph with interrupt() for user approval.
+                ToolMessages the model can recover from. `update_watchlist` and
+                `update_holdings` pause the whole graph with interrupt() for approval.
+                Filing passages are numbered across searches (S1-S6, then S7-S12).
 * compliance  - deterministic post-processing: disclaimer on advice-seeking
                 turns, guaranteed even if the model forgets.
 
@@ -19,10 +20,11 @@ which gives multi-turn memory and makes interrupt/resume possible.
 """
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Literal
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, trim_messages
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage, trim_messages
 from langchain_core.messages.utils import count_tokens_approximately
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
@@ -60,6 +62,37 @@ class RouteDecision(BaseModel):
     category: Literal["finance", "off_topic", "unsafe"] = Field(description="Topic class")
     personal_advice: bool = Field(description="User asks what they personally should buy/sell/allocate")
     reason: str = Field(description="One short phrase explaining the decision")
+
+
+def _filing_results(m: BaseMessage) -> dict | None:
+    if not (isinstance(m, ToolMessage) and m.name == "search_filings"):
+        return None
+    try:
+        data = json.loads(_text_of(m.content))
+    except (ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) and data.get("results") else None
+
+
+def number_sources(history: list[BaseMessage], new: list[BaseMessage]) -> list[BaseMessage]:
+    """Every search_filings call numbers its passages S1..S6. When one answer needs two searches,
+    continue the count (S7..S12) so each [S#] the model writes points at exactly one passage."""
+    used = 0
+    for m in reversed(history):  # sources already handed out in this turn
+        if isinstance(m, HumanMessage):
+            break
+        if data := _filing_results(m):
+            used += len(data["results"])
+    out = []
+    for m in new:
+        data = _filing_results(m)
+        if data:
+            for r in data["results"]:
+                used += 1
+                r["source_id"] = f"S{used}"
+            m = m.model_copy(update={"content": json.dumps(data, default=str)})
+        out.append(m)
+    return out
 
 
 def build_graph(tools: list[BaseTool], checkpointer=None, settings: Settings | None = None,
@@ -103,6 +136,12 @@ def build_graph(tools: list[BaseTool], checkpointer=None, settings: Settings | N
                                            usage_metadata=last.usage_metadata)]}
         return {}
 
+    tool_node = ToolNode(tools, handle_tool_errors=True)
+
+    async def run_tools(state: AgentState, config: RunnableConfig) -> dict:
+        out = await tool_node.ainvoke(state, config)
+        return {"messages": number_sources(state["messages"], out["messages"])}
+
     def respond_refusal(state: AgentState) -> dict:
         text = prompts.REFUSAL_UNSAFE if state["category"] == "unsafe" else prompts.REFUSAL_OFF_TOPIC
         return {"messages": [AIMessage(content=text)]}
@@ -118,7 +157,7 @@ def build_graph(tools: list[BaseTool], checkpointer=None, settings: Settings | N
     g = StateGraph(AgentState)
     g.add_node("guardrail", guardrail)
     g.add_node("agent", agent)
-    g.add_node("tools", ToolNode(tools, handle_tool_errors=True))
+    g.add_node("tools", run_tools)
     g.add_node("compliance", compliance)
     g.add_node("respond_refusal", respond_refusal)
     g.add_edge(START, "guardrail")

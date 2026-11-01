@@ -179,12 +179,14 @@ def _summarize_tool(msg: ToolMessage) -> tuple[str, list[dict]]:
     if msg.name == "get_news":
         return f"{len(data.get('articles', []))} articles for {data.get('ticker')}", []
     if msg.name == "get_portfolio":
-        return f"{len(data.get('positions', []))} positions, ${data.get('total_invested'):,} invested", []
+        n = len(data.get("positions", []))
+        worth = data.get("total_value")
+        return (f"{n} position{'s' if n != 1 else ''}, worth ${worth:,.2f}" if worth else f"{n} positions"), []
     if msg.name == "search_filings":
         res = data.get("results", [])
         cites = [{"id": r["source_id"], **r["citation"], "snippet": _snippet(r.get("text", ""))} for r in res]
         return f"{len(res)} filing passages", cites
-    if msg.name == "update_watchlist":
+    if msg.name in ("update_watchlist", "update_holdings"):
         return data.get("status", "done"), []
     return raw[:160], []
 
