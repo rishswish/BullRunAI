@@ -132,3 +132,22 @@ async def test_falls_back_to_backup_provider(monkeypatch):
     g = builder.build_graph(await load_tools(), InMemorySaver(), s)
     out = await g.ainvoke({"messages": [("user", "price of NVDA")]}, CFG)
     assert out["category"] == "finance" and "get_quote" in _tools_called(out)
+
+
+def test_session_token_auth(monkeypatch):
+    import time
+
+    import jwt
+
+    from bullrun_agent import api
+    from bullrun_agent.config import get_settings
+
+    s = get_settings().model_copy(update={"auth_disabled": False, "session_secret": "test-secret"})
+    monkeypatch.setattr(api, "get_settings", lambda: s)
+    good = jwt.encode({"iss": "bullrun", "email": "a@b.com", "name": "A", "exp": int(time.time()) + 60},
+                      "test-secret", algorithm="HS256")
+    assert api.current_user(f"Bearer {good}").email == "a@b.com"
+    expired = jwt.encode({"iss": "bullrun", "email": "a@b.com", "exp": int(time.time()) - 60},
+                         "test-secret", algorithm="HS256")
+    with pytest.raises(api.HTTPException):
+        api.current_user(f"Bearer {expired}")

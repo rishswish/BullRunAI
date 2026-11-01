@@ -71,12 +71,20 @@ def current_user(authorization: str | None = Header(default=None)) -> User:
         return User(email="demo@bullrun.ai", name="Demo Investor")
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing bearer token")
+    token = authorization.split(" ", 1)[1]
+    if s.session_secret:  # BullRun session token from the Flask server's /api/session
+        import jwt
+
+        try:
+            info = jwt.decode(token, s.session_secret, algorithms=["HS256"], issuer="bullrun")
+            return User(email=info["email"], name=info.get("name"))
+        except jwt.PyJWTError:
+            pass
     from google.auth.transport import requests as g_requests
     from google.oauth2 import id_token
 
     try:
-        info = id_token.verify_oauth2_token(authorization.split(" ", 1)[1], g_requests.Request(),
-                                            s.google_client_id, clock_skew_in_seconds=10)
+        info = id_token.verify_oauth2_token(token, g_requests.Request(), s.google_client_id, clock_skew_in_seconds=10)
     except Exception as e:
         raise HTTPException(401, "Invalid token") from e
     return User(email=info["email"], name=info.get("name"))

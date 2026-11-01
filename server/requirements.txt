@@ -7,3 +7,4 @@ snaptrade-python-sdk
 gunicorn
 google-genai
 google-adk
+pyjwt

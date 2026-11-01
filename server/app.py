@@ -62,6 +62,25 @@ def get_firestore_client():
         return firestore.Client(credentials=credentials, project=PROJECT_ID, database=FIRESTORE_DATABASE)
     return firestore.Client(project=PROJECT_ID, database=FIRESTORE_DATABASE)
 
+SESSION_SECRET = os.environ.get("SESSION_SECRET")
+SESSION_DAYS = 7
+
+
+def _verify_google(token):
+    return id_token.verify_oauth2_token(token, google_requests.Request(), GOOGLE_CLIENT_ID, clock_skew_in_seconds=10)
+
+
+def _verify_session(token):
+    """Our own session token (issued by /api/session). Google ID tokens only last an hour."""
+    if not SESSION_SECRET:
+        return None
+    import jwt
+    try:
+        return jwt.decode(token, SESSION_SECRET, algorithms=["HS256"], issuer="bullrun")
+    except jwt.PyJWTError:
+        return None
+
+
 # Token verification decorator
 def require_token(f):
     @wraps(f)
@@ -75,12 +94,7 @@ def require_token(f):
         token = auth_header.split(' ')[1]
         
         try:
-            idinfo = id_token.verify_oauth2_token(
-                token,
-                google_requests.Request(),
-                GOOGLE_CLIENT_ID,
-                clock_skew_in_seconds=10
-            )
+            idinfo = _verify_session(token) or _verify_google(token)
             request.user_email = idinfo.get('email')
             request.user_info = {
                 "email": idinfo.get('email'),
@@ -208,6 +222,24 @@ def _ensure_snaptrade_user(client: firestore.Client, email: str):
         pass
     ref.update(update_doc)
     return {"userId": user_id, "userSecret": user_secret}
+
+@app.route('/api/session', methods=['POST'])
+def create_session():
+    """Swap a Google ID token (valid 1h) for a BullRun session token (valid 7 days)."""
+    if not SESSION_SECRET:
+        return jsonify({"error": "sessions not configured"}), 503
+    auth = request.headers.get('Authorization', '')
+    try:
+        info = _verify_google(auth.split(' ', 1)[1])
+    except Exception as e:
+        print(f"[AUTH] session exchange failed: {e}")
+        return jsonify({"error": "Invalid token"}), 401
+    import jwt
+    exp = int(time.time()) + SESSION_DAYS * 86400
+    claims = {"iss": "bullrun", "sub": info["email"], "email": info["email"], "name": info.get("name"),
+              "picture": info.get("picture"), "exp": exp}
+    return jsonify({"token": jwt.encode(claims, SESSION_SECRET, algorithm="HS256"), "expires_at": exp * 1000}), 200
+
 
 @app.route('/api/user', methods=['GET'])
 @require_token

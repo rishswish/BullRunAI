@@ -131,7 +131,7 @@ useEffect(() => {
   }, []);
 
   const handleLoginSuccess = (userData) => {
-    const item = { data: userData, expiry: Date.now() + (60 * 60 * 1000) };
+    const item = { data: userData, expiry: userData.expiresAt || Date.now() + (60 * 60 * 1000) };
     localStorage.setItem('br_user', JSON.stringify(item));
     setUser(userData);
     // Clear profile on new login to force fresh fetch
@@ -139,6 +139,20 @@ useEffect(() => {
     localStorage.removeItem('br_profile');
     profileRequestedRef.current = false;
   };
+
+  // An expired or revoked token anywhere means sign in again, not a silent failure.
+  useEffect(() => {
+    if (!user?.token) return;
+    const original = window.fetch;
+    window.fetch = async (...args) => {
+      const res = await original(...args);
+      const init = args[1] || {};
+      const auth = init.headers?.Authorization || init.headers?.authorization;
+      if (res.status === 401 && auth === `Bearer ${user.token}`) handleLogout();
+      return res;
+    };
+    return () => { window.fetch = original; };
+  }, [user?.token]);
 
   const handleLogout = () => {
     setUser(null);

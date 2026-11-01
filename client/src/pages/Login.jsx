@@ -1037,7 +1037,7 @@ function AuthPage({ onLoginSuccess }) {
     return () => window.removeEventListener("resize", syncGoogleWidth);
   }, []);
 
-  const handleGoogleSuccess = ({ credential }) => {
+  const handleGoogleSuccess = async ({ credential }) => {
     if (!credential) {
       setError("Google did not return a sign-in token.");
       return;
@@ -1050,11 +1050,29 @@ function AuthPage({ onLoginSuccess }) {
       payload = {};
     }
 
+    // Swap Google's 1-hour token for a 7-day BullRun session; fall back to the Google token.
+    let token = credential;
+    let expiresAt = (payload.exp || 0) * 1000;
+    try {
+      const res = await fetch(`${apiUrl}/api/session`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${credential}` },
+      });
+      if (res.ok) {
+        const session = await res.json();
+        token = session.token;
+        expiresAt = session.expires_at;
+      }
+    } catch {
+      // keep the Google token
+    }
+
     onLoginSuccess({
       email: payload.email,
       name: payload.name,
       picture: payload.picture,
-      token: credential,
+      token,
+      expiresAt,
     });
   };
 

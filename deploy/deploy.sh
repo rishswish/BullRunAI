@@ -133,6 +133,12 @@ ensure_secret snaptrade-consumer-key "SnapTrade consumer key (optional, brokerag
 ensure_secret snaptrade-client-id   "SnapTrade client id (optional)" no
 ensure_secret langsmith-api-key     "LangSmith API key (optional, agent tracing)" no
 ensure_secret openai-api-key        "OpenAI API key (optional, backup model if Gemini is rate-limited)" no
+# Signs 7-day login sessions (Google sign-in tokens expire after an hour). Generated, never typed.
+if ! gcloud secrets describe session-secret >/dev/null 2>&1; then
+  openssl rand -hex 32 | tr -d '\n' | gcloud secrets create session-secret --data-file=- --replication-policy=automatic --quiet >/dev/null
+  info "session-secret: generated"
+fi
+HAVE[session-secret]=1
 
 # Build the --set-secrets lists from what exists.
 secrets_flag() {  # pairs: ENV_NAME=secret-name ...
@@ -143,9 +149,9 @@ secrets_flag() {  # pairs: ENV_NAME=secret-name ...
   echo "$out"
 }
 AGENT_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key \
-  LANGSMITH_API_KEY=langsmith-api-key OPENAI_API_KEY=openai-api-key SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
+  LANGSMITH_API_KEY=langsmith-api-key OPENAI_API_KEY=openai-api-key SESSION_SECRET=session-secret SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
 MCP_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key)
-SERVER_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key \
+SERVER_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key SESSION_SECRET=session-secret \
   SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
 TRACING=false; [[ -n "${HAVE[langsmith-api-key]:-}" ]] && TRACING=true
 FALLBACK=""; [[ -n "${HAVE[openai-api-key]:-}" ]] && FALLBACK=";FALLBACK_PROVIDER=openai;FALLBACK_MODEL=${FALLBACK_MODEL:-gpt-4.1-mini}"

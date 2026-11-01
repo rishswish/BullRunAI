@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     checkpoint_db_url: str | None = None  # postgres://... for durable memory
 
     google_client_id: str | None = None
+    session_secret: str | None = None  # shared with the Flask server, signs 7-day session tokens
     auth_disabled: bool = False  # local dev + demo mode only
     cors_origins: str = "*"
 
