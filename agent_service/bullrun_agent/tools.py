@@ -58,7 +58,8 @@ def get_quote(ticker: Annotated[str, "Stock or ETF symbol, e.g. NVDA"]) -> str:
 
 @tool
 def get_news(ticker: Annotated[str, "Stock symbol"], limit: Annotated[int, "1-10"] = 5) -> str:
-    """Recent news headlines for a ticker with publisher, date and per-article sentiment.
+    """Recent news about a company from two providers, filtered to articles that actually
+    mention it and ranked headline-first. Sentiment is included only for stories about the stock.
     Use to explain *why* a stock moved or what the market is talking about."""
     return _j(ds.get_news(ticker, limit))
 

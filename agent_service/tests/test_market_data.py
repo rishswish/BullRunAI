@@ -143,3 +143,48 @@ def test_demo_brokerage_is_labelled(monkeypatch):
     accounts = {p["account"] for p in out["positions"]}
     assert accounts == {"manual", "Robinhood (simulated demo account)"}
     assert "simulated" in out["note"]
+
+
+def test_news_keeps_only_articles_about_the_company(monkeypatch):
+    def poly(path, params, s):
+        def art(title, desc, pub, ts, sentiment="neutral"):
+            ins = [{"ticker": "AAPL", "sentiment": sentiment, "sentiment_reasoning": "r"}]
+            return {"title": title, "description": desc, "publisher": {"name": pub}, "published_utc": ts,
+                    "article_url": f"https://x/{title[:10]}", "insights": ins}
+        return {"results": [
+            art("MP Materials Has Collapsed 60% From Its Highs", "Rare earths story.", "The Motley Fool",
+                "2026-11-01T12:33Z"),
+            art("Alphabet Gets Kicked Out of the $4 Trillion Club", "Falls behind Microsoft and Apple.",
+                "The Motley Fool",
+                "2026-11-01T12:15Z"),
+            art("Is Apple a Top Tech Stock to Buy Now?", "Valuation looks stretched.", "The Motley Fool",
+                "2026-10-31T17:30Z", "negative"),
+            art("Apple's Services Revenue Hits Record", "Strong quarter.", "The Motley Fool", "2026-10-30T10:00Z"),
+            art("3 Apple Stocks To Watch", "AAPL and peers.", "The Motley Fool", "2026-10-29T10:00Z"),
+        ]}
+    finnhub = [{"title": "Apple beats on iPhone sales", "publisher": "Reuters", "published_utc": "2026-10-31T21:00Z",
+                "description": "Apple Inc reported...", "url": "https://r/1"},
+               {"title": "IS APPLE A TOP TECH STOCK TO BUY NOW?", "publisher": "Yahoo",
+                "published_utc": "2026-10-31T18:00Z", "description": "dup", "url": "https://y/1"}]
+    monkeypatch.setattr(ds, "_polygon_get", poly)
+    monkeypatch.setattr(ds, "_finnhub_news", lambda t, s: finnhub)
+    monkeypatch.setattr(ds, "_company_name", lambda t, s: "Apple")
+
+    out = ds.get_news("AAPL", 5, live(finnhub_api_key="k"))
+    titles = [a["title"] for a in out["articles"]]
+    assert not any("MP Materials" in x for x in titles)          # only tagged, never mentions Apple
+    assert titles[0] == "Apple beats on iPhone sales"             # headline match, newest first, second source
+    assert "Alphabet Gets Kicked Out of the $4 Trillion Club" not in titles[:3]  # summary-only match ranks last
+    assert sum("buy now" in x.lower() for x in titles) == 1       # same story from two sources kept once
+    assert sum(a["publisher"] == "The Motley Fool" for a in out["articles"]) <= 2
+    svc = next(a for a in out["articles"] if a["title"].startswith("Apple's Services"))
+    assert svc["sentiment"] == "neutral" and svc["match"] == "headline"
+    assert out["source"] == "polygon+finnhub"
+
+
+def test_company_name_strips_suffixes(monkeypatch):
+    for raw, want in [("Apple Inc", "Apple"), ("Alphabet Inc Class A", "Alphabet"), ("NVIDIA Corp", "NVIDIA"),
+                      ("Microsoft Corporation", "Microsoft")]:
+        ds._cache.clear()
+        monkeypatch.setattr(ds, "_cached", lambda k, ttl, fn, raw=raw: raw)
+        assert ds._company_name("X", live(finnhub_api_key="k")) == want

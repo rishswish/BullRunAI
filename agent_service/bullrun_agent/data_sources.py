@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -168,7 +169,77 @@ def _shape_quote(t: str, q: dict, source: str, as_of: Any = None) -> dict:
     }
 
 
+_NAME_SUFFIX = re.compile(r"[,.]?\s+(inc|incorporated|corp|corporation|co|company|ltd|limited|plc|holdings?|group|"
+                          r"n\.?v|s\.?a|ag|class [a-c]|common stock|the)\.?$", re.I)
+
+
+def _company_name(t: str, s: Settings) -> str | None:
+    """Short company name for matching headlines ("Apple Inc" -> "Apple"). Cached a day."""
+    if not s.finnhub_api_key:
+        return None
+
+    def fetch():
+        r = httpx.get("https://finnhub.io/api/v1/stock/profile2", params={"symbol": t, "token": s.finnhub_api_key},
+                      timeout=8)
+        r.raise_for_status()
+        return r.json().get("name") or ""
+    try:
+        name = _cached(f"name:{t}", 86400, fetch)
+    except httpx.HTTPError:
+        return None
+    prev = None
+    while name and name != prev:  # strip stacked suffixes: "Alphabet Inc Class A"
+        prev, name = name, _NAME_SUFFIX.sub("", name).strip()
+    return name if len(name) >= 3 else None
+
+
+def _relevance(article: dict, t: str, name: str | None) -> int:
+    """3 = ticker/company in the headline, 1 = only in the summary, 0 = just tagged."""
+    def mentions(text: str) -> bool:
+        # ticker is case-sensitive so "ON" or "ALL" don't match ordinary words
+        return bool(re.search(rf"\b{re.escape(t)}\b", text) or
+                    (name and re.search(rf"\b{re.escape(name)}\b", text, re.I)))
+    if mentions(article.get("title") or ""):
+        return 3
+    return 1 if mentions(article.get("description") or "") else 0
+
+
+def _polygon_news(t: str, s: Settings) -> list[dict]:
+    data = _polygon_get("/v2/reference/news", {"ticker": t, "limit": 20, "order": "desc"}, s)
+    out = []
+    for a in data.get("results", []):
+        ins = next((i for i in a.get("insights") or [] if i.get("ticker") == t), {})
+        out.append({"title": a.get("title"), "publisher": (a.get("publisher") or {}).get("name"),
+                    "published_utc": a.get("published_utc"), "description": (a.get("description") or "")[:400],
+                    "url": a.get("article_url"), "_sentiment": ins.get("sentiment"),
+                    "_why": ins.get("sentiment_reasoning")})
+    return out
+
+
+def _finnhub_news(t: str, s: Settings) -> list[dict]:
+    today = date.today()
+    r = httpx.get("https://finnhub.io/api/v1/company-news", timeout=8, params={
+        "symbol": t, "from": (today - timedelta(days=7)).isoformat(), "to": today.isoformat(),
+        "token": s.finnhub_api_key})
+    r.raise_for_status()
+    return [{"title": a.get("headline"), "publisher": a.get("source"),
+             "published_utc": datetime.fromtimestamp(a["datetime"], tz=timezone.utc).isoformat(),
+             "description": (a.get("summary") or "")[:400], "url": a.get("url")}
+            for a in r.json()[:30] if a.get("datetime") and a.get("headline")]
+
+
+def _norm_title(title: str) -> str:
+    return re.sub(r"[^a-z0-9 ]", "", (title or "").lower())[:80]
+
+
 def get_news(ticker: str, limit: int = 5, settings: Settings | None = None) -> dict:
+    """Recent news that is actually about the company.
+
+    Both providers over-match (an article that names Apple once in a list gets tagged AAPL),
+    so we pull ~20 candidates from each, keep only articles that mention the ticker or the
+    company name, rank headline matches first, de-duplicate across sources and cap each
+    publisher at two so one outlet's opinion pieces don't crowd out the news.
+    """
     s = settings or get_settings()
     t = ticker.upper().strip()
     limit = max(1, min(int(limit), 10))
@@ -178,47 +249,46 @@ def get_news(ticker: str, limit: int = 5, settings: Settings | None = None) -> d
         items = demo_data()["news"].get(t, [])[:limit]
         return {"ticker": t, "articles": items, "source": "demo"}
 
-    def fetch():
-        data = _polygon_get("/v2/reference/news", {"ticker": t, "limit": limit, "order": "desc"}, s)
-        arts = []
-        for a in data.get("results", []):
-            ins = next((i for i in a.get("insights") or [] if i.get("ticker") == t), {})
-            arts.append({
-                "title": a.get("title"),
-                "publisher": (a.get("publisher") or {}).get("name"),
-                "published_utc": a.get("published_utc"),
-                "description": (a.get("description") or "")[:400],
-                "sentiment": ins.get("sentiment"),
-                "url": a.get("article_url"),
-            })
-        return {"ticker": t, "articles": arts, "source": "polygon"}
-
-    if s.polygon_api_key:
+    candidates, sources = [], []
+    providers = (("polygon", s.polygon_api_key, _polygon_news), ("finnhub", s.finnhub_api_key, _finnhub_news))
+    for name, enabled, fn in providers:
+        if not enabled:
+            continue
         try:
-            out = _cached(f"news:{t}:{limit}", 300, fetch)
-            if out["articles"] or not s.finnhub_api_key:
-                return out
+            got = _cached(f"news:{name}:{t}", 600, lambda fn=fn: fn(t, s))
         except httpx.HTTPError as e:
-            log.warning("polygon news failed for %s: %s", t, e)
-    if s.finnhub_api_key:
-        try:
-            return _cached(f"fhnews:{t}:{limit}", 300, lambda: _finnhub_news(t, limit, s))
-        except httpx.HTTPError as e:
-            log.warning("finnhub news failed for %s: %s", t, e)
-    return {"ticker": t, "articles": [], "error": "news unavailable", "source": "none"}
+            log.warning("%s news failed for %s: %s", name, t, e)
+            continue
+        sources.append(name)
+        candidates += got
+    if not sources:
+        return {"ticker": t, "articles": [], "error": "news unavailable", "source": "none"}
 
-
-def _finnhub_news(t: str, limit: int, s: Settings) -> dict:
-    today = date.today()
-    r = httpx.get("https://finnhub.io/api/v1/company-news", timeout=8, params={
-        "symbol": t, "from": (today - timedelta(days=7)).isoformat(), "to": today.isoformat(),
-        "token": s.finnhub_api_key})
-    r.raise_for_status()
-    arts = [{"title": a.get("headline"), "publisher": a.get("source"),
-             "published_utc": datetime.fromtimestamp(a["datetime"], tz=timezone.utc).isoformat(),
-             "description": (a.get("summary") or "")[:400], "url": a.get("url")}
-            for a in r.json()[:limit] if a.get("datetime")]
-    return {"ticker": t, "articles": arts, "source": "finnhub"}
+    company = _company_name(t, s)
+    ranked, seen, per_pub = [], set(), {}
+    scored = [(_relevance(a, t, company), a.get("published_utc") or "", a) for a in candidates]
+    for score, _, a in sorted(scored, key=lambda x: (x[0], x[1]), reverse=True):
+        key = _norm_title(a["title"])
+        pub = (a.get("publisher") or "").lower()
+        if score == 0 or key in seen or per_pub.get(pub, 0) >= 2:
+            continue
+        seen.add(key)
+        per_pub[pub] = per_pub.get(pub, 0) + 1
+        item = {k: v for k, v in a.items() if not k.startswith("_")}
+        item["match"] = "headline" if score == 3 else "summary"
+        if score == 3 and a.get("_sentiment"):  # sentiment only means something when the story is about the stock
+            item["sentiment"] = a["_sentiment"]
+            if a.get("_why"):
+                item["sentiment_reason"] = a["_why"][:200]
+        ranked.append(item)
+        if len(ranked) == limit:
+            break
+    out = {"ticker": t, "company": company, "articles": ranked, "source": "+".join(sources),
+           "candidates_checked": len(candidates)}
+    if not ranked:
+        out["note"] = (f"No recent articles are mainly about {company or t}; "
+                       "say so rather than using loosely related news.")
+    return out
 
 
 # ---------------------------------------------------------------------------
