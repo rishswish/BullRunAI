@@ -2,13 +2,16 @@
 
     POST /api/agent/chat     {message, thread_id?}         -> SSE stream
     POST /api/agent/resume   {thread_id, approved}          -> SSE stream (after an approval request)
+    GET  /api/agent/threads                                 -> the user's chats, newest first
     GET  /api/agent/threads/{thread_id}                     -> message history
+    DELETE /api/agent/threads/{thread_id}
     GET  /health
 
 SSE event types: route, token, tool_start, tool_end, approval_required, final, error.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -32,6 +35,7 @@ from .config import get_settings
 from .graph import build_graph, make_checkpointer
 from .graph.builder import _text_of
 from .rag import get_index
+from .threads import get_thread_store
 from .tools import load_tools
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -173,7 +177,16 @@ def _summarize_tool(msg: ToolMessage) -> tuple[str, list[dict]]:
     return raw[:160], []
 
 
-async def _stream(graph, payload, config: dict, thread_id: str) -> AsyncIterator[dict]:
+async def _save_transcript(email: str, thread_id: str, messages: list[dict]) -> None:
+    if not messages:
+        return
+    try:
+        await asyncio.to_thread(get_thread_store().append, email, thread_id, messages)
+    except Exception:  # history is a convenience; never fail the chat over it
+        log.exception("saving chat history failed thread=%s", thread_id)
+
+
+async def _stream(graph, payload, config: dict, thread_id: str, user_text: str | None = None) -> AsyncIterator[dict]:
     run_id = str(config.get("run_id", ""))
     started = time.perf_counter()
     usage = {"input_tokens": 0, "output_tokens": 0}
@@ -213,9 +226,14 @@ async def _stream(graph, payload, config: dict, thread_id: str) -> AsyncIterator
                         citations.extend(cites)
                         yield _sse("tool_end", {"id": m.tool_call_id, "name": m.name, "summary": summary,
                                                 "status": getattr(m, "status", "success")})
-        if not interrupted:
+        email = config["configurable"]["user_email"]
+        said = [{"role": "user", "text": user_text}] if user_text else []
+        if interrupted:
+            await _save_transcript(email, thread_id, said)
+        else:
             state = await graph.aget_state(config)
             final = state.values["messages"][-1]
+            await _save_transcript(email, thread_id, said + [{"role": "assistant", "text": _text_of(final.content)}])
             yield _sse("final", {
                 "text": _text_of(final.content),
                 "category": state.values.get("category"),
@@ -244,8 +262,14 @@ async def chat(body: ChatIn, request: Request, user: User = Depends(rate_limited
         # a pending approval exists: a new message implicitly declines it
         await graph.ainvoke(Command(resume={"approved": False}), _config(user, thread_id))
     run_id = str(uuid.uuid4())
-    payload = {"messages": [HumanMessage(body.message)]}
-    return EventSourceResponse(_stream(graph, payload, _config(user, thread_id, run_id), thread_id),
+    history = []
+    if body.thread_id and not (await graph.aget_state(_config(user, thread_id))).values.get("messages"):
+        # this instance has no live state for the thread (e.g. after a restart): replay the saved transcript
+        saved = await asyncio.to_thread(get_thread_store().get, user.email, thread_id)
+        for m in (saved or {}).get("messages", []):
+            history.append(HumanMessage(m["text"]) if m["role"] == "user" else AIMessage(m["text"]))
+    payload = {"messages": [*history, HumanMessage(body.message)]}
+    return EventSourceResponse(_stream(graph, payload, _config(user, thread_id, run_id), thread_id, body.message),
                                headers={"X-Run-ID": run_id})
 
 
@@ -277,6 +301,11 @@ async def feedback(body: FeedbackIn, user: User = Depends(current_user)):
     return {"ok": True}
 
 
+@app.get("/api/agent/threads")
+async def list_threads(user: User = Depends(current_user)):
+    return {"threads": await asyncio.to_thread(get_thread_store().list, user.email)}
+
+
 @app.get("/api/agent/threads/{thread_id}")
 async def thread_history(thread_id: str, request: Request, user: User = Depends(current_user)):
     state = await request.app.state.graph.aget_state(_config(user, thread_id))
@@ -286,7 +315,19 @@ async def thread_history(thread_id: str, request: Request, user: User = Depends(
             msgs.append({"role": "user", "text": _text_of(m.content)})
         elif isinstance(m, AIMessage) and m.content:
             msgs.append({"role": "assistant", "text": _text_of(m.content)})
+    if not msgs:  # not live in this instance: fall back to the saved transcript
+        saved = await asyncio.to_thread(get_thread_store().get, user.email, thread_id)
+        msgs = [{"role": m["role"], "text": m["text"]} for m in (saved or {}).get("messages", [])]
     return {"thread_id": thread_id, "messages": msgs, "pending_approval": bool(state.next)}
+
+
+@app.delete("/api/agent/threads/{thread_id}")
+async def delete_thread(thread_id: str, request: Request, user: User = Depends(current_user)):
+    await asyncio.to_thread(get_thread_store().delete, user.email, thread_id)
+    saver = request.app.state.graph.checkpointer
+    if hasattr(saver, "adelete_thread"):
+        await saver.adelete_thread(f"{user.email}:{thread_id}")
+    return {"ok": True}
 
 
 @app.get("/health")

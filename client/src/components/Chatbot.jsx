@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import remarkGfm from 'remark-gfm';
 import {
   MessageSquare, Send, ChevronRight, ChevronLeft, Loader2, Check, X, Plus,
-  LineChart, Newspaper, FileText, Briefcase, ListPlus, AlertTriangle, ThumbsUp, ThumbsDown,
+  LineChart, Newspaper, FileText, Briefcase, ListPlus, AlertTriangle, ThumbsUp, ThumbsDown, History, Trash2,
 } from 'lucide-react';
 import { AGENT_API_URL, streamAgent } from '../lib/agentStream';
 
@@ -186,28 +186,55 @@ function Chatbot({ isOpen, setIsOpen, user }) {
   const [threadId, setThreadId] = useState(() => {
     try { return sessionStorage.getItem(THREAD_KEY) || null; } catch { return null; }
   });
+  const [showHistory, setShowHistory] = useState(false);
+  const [threads, setThreads] = useState([]);
   const endRef = useRef(null);
   const abortRef = useRef(null);
+  const authHeaders = user?.token ? { Authorization: `Bearer ${user.token}` } : {};
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  // Restore the conversation after a page reload (memory lives server-side in the checkpointer).
-  useEffect(() => {
-    if (!threadId || messages.length > 1) return;
-    fetch(`${AGENT_API_URL}/api/agent/threads/${threadId}`, {
-      headers: user?.token ? { Authorization: `Bearer ${user.token}` } : {},
-    })
+  const loadThread = useCallback((id) => {
+    fetch(`${AGENT_API_URL}/api/agent/threads/${id}`, { headers: authHeaders })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (!data?.messages?.length) return;
-        setMessages([WELCOME, ...data.messages.map((m) => ({
+        setMessages([WELCOME, ...(data?.messages || []).map((m) => ({
           id: uid(), role: m.role === 'user' ? 'user' : 'bot', text: m.text, time: '',
         }))]);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.token]);
+
+  // Restore the open conversation after a page reload.
+  useEffect(() => {
+    if (threadId && messages.length === 1) loadThread(threadId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.token]);
+
+  const openHistory = () => {
+    setShowHistory((v) => !v);
+    fetch(`${AGENT_API_URL}/api/agent/threads`, { headers: authHeaders })
+      .then((r) => (r.ok ? r.json() : { threads: [] }))
+      .then((data) => setThreads(data.threads || []))
+      .catch(() => setThreads([]));
+  };
+
+  const openThread = (id) => {
+    abortRef.current?.abort();
+    setThreadId(id);
+    try { sessionStorage.setItem(THREAD_KEY, id); } catch { /* storage unavailable */ }
+    setShowHistory(false);
+    setMessages([WELCOME]);
+    loadThread(id);
+  };
+
+  const deleteThread = (id) => {
+    setThreads((prev) => prev.filter((x) => x.id !== id));
+    fetch(`${AGENT_API_URL}/api/agent/threads/${id}`, { method: 'DELETE', headers: authHeaders }).catch(() => {});
+    if (id === threadId) newChat();
+  };
 
   const queryClient = useQueryClient();
 
@@ -302,6 +329,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
     abortRef.current?.abort();
     setMessages([WELCOME]);
     setThreadId(null);
+    setShowHistory(false);
     try { sessionStorage.removeItem(THREAD_KEY); } catch { /* ignore */ }
   };
 
@@ -318,6 +346,10 @@ function Chatbot({ isOpen, setIsOpen, user }) {
           </div>
         </div>
         <div className="flex items-center gap-0.5">
+          <button onClick={openHistory} title="Your chats" aria-label="Your chats"
+            className={`p-1 rounded cursor-pointer ${showHistory ? 'text-green-700 bg-green-50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}>
+            <History className="w-3.5 h-3.5" />
+          </button>
           <button onClick={newChat} title="New chat" aria-label="New chat"
             className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded cursor-pointer">
             <Plus className="w-3.5 h-3.5" />
@@ -331,7 +363,38 @@ function Chatbot({ isOpen, setIsOpen, user }) {
     </div>
   );
 
-  const Body = (
+  const ago = (iso) => {
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (!iso || Number.isNaN(s)) return '';
+    if (s < 3600) return `${Math.max(1, Math.round(s / 60))}m ago`;
+    if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+    return new Date(iso).toLocaleDateString();
+  };
+
+  const HistoryList = (
+    <div className="flex-1 overflow-y-auto p-2">
+      <button onClick={newChat}
+        className="w-full flex items-center gap-1.5 text-xs px-2.5 py-2 mb-1 rounded-md text-green-800 hover:bg-green-50 cursor-pointer">
+        <Plus className="w-3.5 h-3.5" /> New chat
+      </button>
+      {threads.length === 0 && <p className="text-[11px] text-gray-400 px-2.5 py-2">No saved chats yet.</p>}
+      {threads.map((th) => (
+        <div key={th.id}
+          className={`group flex items-center gap-2 px-2.5 py-2 rounded-md ${th.id === threadId ? 'bg-green-50' : 'hover:bg-gray-50'}`}>
+          <button onClick={() => openThread(th.id)} className="min-w-0 flex-1 text-left cursor-pointer">
+            <p className="text-xs text-gray-800 truncate">{th.title}</p>
+            <p className="text-[10px] text-gray-400">{ago(th.updated_at)}</p>
+          </button>
+          <button onClick={() => deleteThread(th.id)} title="Delete chat" aria-label="Delete chat"
+            className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 cursor-pointer">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+
+  const Body = showHistory ? HistoryList : (
     <>
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.map((m) => <Bubble key={m.id} msg={m} onDecide={decide(m.id)} onRate={rate} />)}

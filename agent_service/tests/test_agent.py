@@ -151,3 +151,28 @@ def test_session_token_auth(monkeypatch):
                          "test-secret", algorithm="HS256")
     with pytest.raises(api.HTTPException):
         api.current_user(f"Bearer {expired}")
+
+
+def test_threads_are_listed_and_survive_a_restart():
+    from bullrun_agent import threads
+    from bullrun_agent.api import app
+
+    threads.get_thread_store.cache_clear()
+    with TestClient(app) as client:
+        for tid, q in [("a", "price of NVDA"), ("a", "and AMD?"), ("b", "How is AAPL doing?")]:
+            with client.stream("POST", "/api/agent/chat", json={"message": q, "thread_id": tid}) as r:
+                "".join(r.iter_text())
+        listed = client.get("/api/agent/threads").json()["threads"]
+        assert [t["id"] for t in listed] == ["b", "a"] and listed[1]["title"] == "price of NVDA"
+
+        app.state.graph.checkpointer.storage.clear()  # what a Cloud Run cold start does to in-memory state
+        hist = client.get("/api/agent/threads/a").json()["messages"]
+        assert [m["role"] for m in hist] == ["user", "assistant", "user", "assistant"]
+
+        with client.stream("POST", "/api/agent/chat", json={"message": "and MSFT?", "thread_id": "a"}) as r:
+            "".join(r.iter_text())
+        humans = [m["text"] for m in client.get("/api/agent/threads/a").json()["messages"] if m["role"] == "user"]
+        assert humans == ["price of NVDA", "and AMD?", "and MSFT?"]
+
+        assert client.delete("/api/agent/threads/b").json()["ok"]
+        assert [t["id"] for t in client.get("/api/agent/threads").json()["threads"]] == ["a"]
