@@ -51,7 +51,7 @@ flowchart LR
 | **Memory** | Multiple chats per user, each with its own memory; transcripts saved to Firestore and replayed when a thread isn't live (Cloud Run scales to zero). Per-thread checkpointer (InMemorySaver → `AsyncPostgresSaver` via `CHECKPOINT_DB_URL`); history trimmed to a token budget (current turn always kept) | `graph/builder.py` |
 | **Guardrails** | LLM router with Pydantic structured output (finance / off_topic / unsafe + advice flag) replaces the 90-keyword regex; deterministic disclaimer node | `graph/` |
 | **RAG** | EDGAR ingest → section-aware chunking (Item 1A, Item 7…) → hybrid BM25 + dense retrieval fused with Reciprocal Rank Fusion → `[S#]` citations with filing URLs | `bullrun_agent/rag/` |
-| **MCP** | FastMCP server with tools, resources and prompts; agent consumes it via `langchain-mcp-adapters`; same server works over stdio for Claude Desktop | `bullrun_agent/mcp_server.py` |
+| **MCP** | FastMCP server with tools, resources and prompts; OAuth 2.1 (dynamic client registration, PKCE, Google sign-in) so Claude can use account tools as the signed-in user; agent consumes it via `langchain-mcp-adapters`; same server works over stdio for Claude Desktop | `bullrun_agent/mcp_server.py` |
 | **Streaming** | SSE events: `route`, `token`, `tool_start`, `tool_end`, `approval_required`, `final` (with citations, tokens, latency) | `api.py`, `client/src/lib/agentStream.js` |
 | **Evals** | 22-case golden set (routing, tool selection, parallelism, disclaimer, HITL, citations) + LLM-as-judge groundedness; retrieval hit@k / MRR; CI quality gates | `evals/` |
 | **Traceability** | Each answer gets a run ID that is also its LangSmith trace ID; returned to the UI, written to JSON logs, and linked to 👍/👎 feedback (`POST /api/agent/feedback`) | `api.py`, `Chatbot.jsx` |
@@ -95,6 +95,14 @@ Add to `claude_desktop_config.json` (Settings → Developer → Edit Config):
 ```
 
 Ask Claude *"Use the analyze_ticker prompt for NVDA"* and it will call BullRun's tools.
+
+### Connect BullRun to Claude (your own account, over OAuth)
+
+The deployed MCP server is an OAuth-protected remote server. In Claude: **Settings → Connectors →
+Add custom connector**, URL `https://<br-mcp url>/mcp`. Claude registers itself, sends you to Google
+sign-in, and from then on `get_portfolio`, `get_watchlist` and `update_watchlist` act on *your* BullRun
+data. Your identity comes from the token, never from a tool argument, and the agent service reaches the
+same server with a service token that can't touch any account. See `bullrun_agent/mcp_auth.py`.
 
 ### MCP mode for the agent
 

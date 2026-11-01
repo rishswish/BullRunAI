@@ -133,6 +133,7 @@ ensure_secret snaptrade-consumer-key "SnapTrade consumer key (optional, brokerag
 ensure_secret snaptrade-client-id   "SnapTrade client id (optional)" no
 ensure_secret langsmith-api-key     "LangSmith API key (optional, agent tracing)" no
 ensure_secret openai-api-key        "OpenAI API key (optional, backup model if Gemini is rate-limited)" no
+ensure_secret google-oauth-client-secret "OAuth client secret (optional, lets Claude sign in to BullRun over MCP)" no
 # Signs 7-day login sessions (Google sign-in tokens expire after an hour). Generated, never typed.
 if ! gcloud secrets describe session-secret >/dev/null 2>&1; then
   openssl rand -hex 32 | tr -d '\n' | gcloud secrets create session-secret --data-file=- --replication-policy=automatic --quiet >/dev/null
@@ -150,7 +151,8 @@ secrets_flag() {  # pairs: ENV_NAME=secret-name ...
 }
 AGENT_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key \
   LANGSMITH_API_KEY=langsmith-api-key OPENAI_API_KEY=openai-api-key SESSION_SECRET=session-secret SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
-MCP_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key)
+MCP_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key \
+  SESSION_SECRET=session-secret GOOGLE_OAUTH_CLIENT_SECRET=google-oauth-client-secret)
 SERVER_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key SESSION_SECRET=session-secret \
   SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
 TRACING=false; [[ -n "${HAVE[langsmith-api-key]:-}" ]] && TRACING=true
@@ -247,7 +249,7 @@ bold "7/9  Deploying services"
 info "br-mcp ..."
 gcloud run deploy br-mcp --image="$IMG/br-agent:latest" "${COMMON[@]}" \
   --command=python --args="-m,bullrun_agent.mcp_server,--http" \
-  --set-env-vars="^;^ALLOW_DEMO_DATA=false;EMBEDDING_PROVIDER=gemini;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index" \
+  --set-env-vars="^;^ALLOW_DEMO_DATA=false;EMBEDDING_PROVIDER=gemini;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;MCP_PUBLIC_URL=$MCP_URL;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB" \
   --set-secrets="$MCP_SECRETS" --memory=1Gi --min-instances=0 --max-instances=2 \
   --allow-unauthenticated >/dev/null
 

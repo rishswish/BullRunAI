@@ -2,12 +2,15 @@
 Model Context Protocol, so any MCP client can use them.
 
 Primitives exposed
-  tools      get_quote, get_news, search_filings, compare_tickers, get_portfolio*
+  tools      get_quote, get_news, search_filings, compare_tickers,
+             get_portfolio*, get_watchlist*, update_watchlist*
   resources  bullrun://filings/index  (what's in the RAG index)
-             bullrun://watchlist      (demo/default user's watchlist)*
+             bullrun://watchlist      (the user's watchlist)*
   prompts    analyze_ticker, earnings_risk_review
 
-  * user-scoped items use MCP_USER_EMAIL (for a personal Claude Desktop setup).
+  * user-scoped: over HTTP with OAuth on (MCP_PUBLIC_URL, SESSION_SECRET, GOOGLE_CLIENT_ID,
+    GOOGLE_OAUTH_CLIENT_SECRET) they act on the user who signed in with Google; locally over
+    stdio they use MCP_USER_EMAIL (a personal Claude Desktop setup).
 
 Run
   python -m bullrun_agent.mcp_server                     # stdio (Claude Desktop / Cursor)
@@ -19,14 +22,41 @@ import argparse
 import json
 import os
 
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, RedirectResponse
 
 from . import data_sources as ds
+from .config import get_settings
+from .mcp_auth import SCOPE, FirestoreClients, GoogleOAuthProvider, MemoryClients
 from .rag import get_index
 from .rag import search_filings as _search_filings
 
+
+def _oauth_provider() -> GoogleOAuthProvider | None:
+    s = get_settings()
+    if not (s.mcp_public_url and s.session_secret and s.google_client_id and s.google_oauth_client_secret):
+        return None
+    store = ds.get_user_store()
+    clients = FirestoreClients(store.db) if hasattr(store, "db") else MemoryClients()
+    return GoogleOAuthProvider(public_url=s.mcp_public_url, secret=s.session_secret,
+                               google_client_id=s.google_client_id,
+                               google_client_secret=s.google_oauth_client_secret, clients=clients)
+
+
+oauth = _oauth_provider()
 mcp = FastMCP(
     "bullrun",
+    auth_server_provider=oauth,
+    auth=AuthSettings(
+        issuer_url=oauth.public_url, resource_server_url=f"{oauth.public_url}/mcp", required_scopes=[SCOPE],
+        client_registration_options=ClientRegistrationOptions(enabled=True, valid_scopes=[SCOPE],
+                                                              default_scopes=[SCOPE]),
+        validate_token_resource=False,  # tokens are our own signed JWTs
+    ) if oauth else None,
     instructions=("Market research tools from BullRun: live quotes, ticker news with sentiment, and "
                   "hybrid search over SEC 10-K/10-Q filings with citations. Data marked source=demo is sample data."),
     host="0.0.0.0",
@@ -66,10 +96,40 @@ def compare_tickers(tickers: list[str]) -> dict:
     return {"comparison": ok, "errors": [r for r in rows if "error" in r]}
 
 
-@mcp.tool()
+def _user_email() -> str:
+    """Who the account tools act on: the OAuth-signed-in user, or MCP_USER_EMAIL for local stdio."""
+    tok = get_access_token()
+    if tok is not None:
+        if not tok.subject:
+            raise ValueError("This connection isn't signed in to a BullRun account.")
+        return tok.subject
+    if oauth is not None:  # never fall back to a default user on the public server
+        raise ValueError("Sign in to BullRun to use account tools.")
+    return os.environ.get("MCP_USER_EMAIL", "demo@bullrun.ai")
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
 def get_portfolio() -> dict:
-    """Holdings for the configured BullRun user (MCP_USER_EMAIL), with weights and P/L."""
-    return ds.get_portfolio(os.environ.get("MCP_USER_EMAIL", "demo@bullrun.ai"))
+    """The signed-in user's BullRun holdings (manual and linked accounts) with weights, P/L and cash."""
+    return ds.get_portfolio(_user_email())
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+def get_watchlist() -> dict:
+    """Tickers on the signed-in user's BullRun watchlist."""
+    return {"watchlist": ds.get_user_store().get_user(_user_email()).get("watchlist", [])}
+
+
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True))
+def update_watchlist(add: list[str] | None = None, remove: list[str] | None = None) -> dict:
+    """Add or remove tickers on the signed-in user's BullRun watchlist (shows up on their dashboard).
+    Confirm the change with the user before calling."""
+    from .tools import _clean, apply_watchlist_change
+
+    add, remove = _clean(add or []), _clean(remove or [])
+    if not add and not remove:
+        return {"error": "No valid tickers given"}
+    return {"status": "applied", **apply_watchlist_change(_user_email(), add, remove)}
 
 
 # ---------------------------------------------------------------------------
@@ -92,8 +152,23 @@ def filings_index() -> str:
 @mcp.resource("bullrun://watchlist")
 def watchlist() -> str:
     """The configured user's watchlist."""
-    email = os.environ.get("MCP_USER_EMAIL", "demo@bullrun.ai")
-    return json.dumps(ds.get_user_store().get_user(email).get("watchlist", []))
+    return json.dumps(ds.get_user_store().get_user(_user_email()).get("watchlist", []))
+
+
+# ---------------------------------------------------------------------------
+# Google sign-in callback for the OAuth flow
+# ---------------------------------------------------------------------------
+if oauth is not None:
+    @mcp.custom_route("/oauth/google/callback", methods=["GET"])
+    async def google_callback(request: Request):
+        q = request.query_params
+        if q.get("error") or not q.get("code"):
+            return HTMLResponse("Google sign-in was cancelled. You can close this tab.", status_code=400)
+        try:
+            email = await oauth.google_email(q["code"])
+            return RedirectResponse(oauth.finish_authorization(q.get("state", ""), email), status_code=302)
+        except Exception as e:
+            return HTMLResponse(f"Sign-in failed: {e}. Please try connecting again.", status_code=400)
 
 
 # ---------------------------------------------------------------------------

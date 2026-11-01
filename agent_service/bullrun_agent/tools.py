@@ -120,8 +120,16 @@ async def load_tools(mode: str = "local", mcp_url: str | None = None) -> list[Ba
     if mode == "mcp":
         from langchain_mcp_adapters.client import MultiServerMCPClient
 
-        client = MultiServerMCPClient({"bullrun": {"url": mcp_url, "transport": "streamable_http"}})
-        local_names = {t.name for t in USER_TOOLS}
+        from .config import get_settings
+
+        conn = {"url": mcp_url, "transport": "streamable_http"}
+        if secret := get_settings().session_secret:  # the MCP server requires a token once OAuth is on
+            from .mcp_auth import service_token
+
+            conn["headers"] = {"Authorization": f"Bearer {service_token(secret)}"}
+        client = MultiServerMCPClient({"bullrun": conn})
+        # account tools always run in-process with the chat's own user, never via the MCP server
+        local_names = {t.name for t in USER_TOOLS} | {"get_watchlist"}
         # User-scoped tools always run in-process (they need the authenticated identity).
         public = [t for t in await client.get_tools() if t.name not in local_names]
         return [*public, *USER_TOOLS]

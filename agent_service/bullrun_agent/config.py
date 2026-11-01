@@ -63,6 +63,9 @@ class Settings(BaseSettings):
 
     google_client_id: str | None = None
     session_secret: str | None = None  # shared with the Flask server, signs 7-day session tokens
+    # MCP server OAuth (lets Claude act on a signed-in user's data); off unless all are set
+    mcp_public_url: str | None = None  # e.g. https://br-mcp-....run.app
+    google_oauth_client_secret: str | None = None
     auth_disabled: bool = False  # local dev + demo mode only
     cors_origins: str = "*"
 
