@@ -15,6 +15,8 @@
    client, Flask API, agent, MCP server, report jobs with schedules, and the SEC filings index.
 4. It prints the app URL at the end. On demo day, keep instances warm:
    `MIN_INSTANCES=1 SKIP_BUILD=1 bash deploy/deploy.sh`.
+5. After a code change, rebuild only what changed: `git pull && ONLY="agent" bash deploy/deploy.sh`
+   (names: agent, server, global, personal, client; about 5 minutes).
 
 The rest of this file is the manual, step-by-step equivalent for the agent service.
 

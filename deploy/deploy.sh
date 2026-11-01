@@ -27,6 +27,8 @@
 #   MIN_INSTANCES=0        set to 1 on demo day to avoid cold starts (small hourly cost)
 #   RESET_SECRETS=1        re-prompt for every API key
 #   SKIP_BUILD=1           redeploy using the last built images
+#   ONLY="agent client"    rebuild just these images (agent server global personal client)
+#   REINGEST=1             rebuild the filings index even if one exists
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
@@ -195,14 +197,17 @@ if [[ -z "${SKIP_BUILD:-}" ]]; then
     gcloud builds submit "$1" --tag="$IMG/$2:latest" --quiet --suppress-logs \
       || die "Build of $2 failed. Open https://console.cloud.google.com/cloud-build/builds?project=$PROJECT_ID for logs."
   }
-  build agent_service br-agent
-  build server br-server
-  build global_report_agent br-global-agent
-  build personal_report_agent br-personal-agent
-  info "building br-client ..."
-  gcloud builds submit client --config=deploy/client-build.yaml --quiet --suppress-logs \
-    --substitutions="_IMAGE=$IMG/br-client:latest,_VITE_APP_API_URL=$SERVER_URL,_VITE_APP_GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID,_VITE_AGENT_API_URL=$AGENT_URL" \
-    || die "Client build failed. See https://console.cloud.google.com/cloud-build/builds?project=$PROJECT_ID"
+  want() { [[ -z "${ONLY:-}" || " $ONLY " == *" $1 "* ]]; }
+  if want agent; then build agent_service br-agent; fi
+  if want server; then build server br-server; fi
+  if want global; then build global_report_agent br-global-agent; fi
+  if want personal; then build personal_report_agent br-personal-agent; fi
+  if want client; then
+    info "building br-client ..."
+    gcloud builds submit client --config=deploy/client-build.yaml --quiet --suppress-logs \
+      --substitutions="_IMAGE=$IMG/br-client:latest,_VITE_APP_API_URL=$SERVER_URL,_VITE_APP_GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID,_VITE_AGENT_API_URL=$AGENT_URL" \
+      || die "Client build failed. See https://console.cloud.google.com/cloud-build/builds?project=$PROJECT_ID"
+  fi
 else
   info "SKIP_BUILD set: reusing existing images"
 fi
@@ -216,8 +221,12 @@ gcloud run jobs deploy br-rag-ingest --image="$IMG/br-agent:latest" "${COMMON[@]
   --set-env-vars="^;^EMBEDDING_PROVIDER=gemini;SEC_USER_AGENT=BullRunAI $ACCOUNT;INDEX_DIR=/tmp/filings_index" \
   --set-secrets="GOOGLE_API_KEY=google-api-key:latest" \
   --memory=2Gi --cpu=1 --task-timeout=3600 --max-retries=1 >/dev/null
-gcloud run jobs execute br-rag-ingest --region="$REGION" --async --quiet >/dev/null
-info "ingest started; Spade's filings search goes live once it finishes (~5-10 min)"
+if [[ -n "${REINGEST:-}" ]] || ! gcloud storage ls "$INDEX_URI/" >/dev/null 2>&1; then
+  gcloud run jobs execute br-rag-ingest --region="$REGION" --async --quiet >/dev/null
+  info "ingest started; Spade's filings search goes live once it finishes (~5-10 min)"
+else
+  info "filings index already built (REINGEST=1 to rebuild)"
+fi
 
 # ---------------------------------------------------------------------------
 bold "7/9  Deploying services"
@@ -273,9 +282,14 @@ schedule() {  # name job cron
 schedule br-global-report br-global-agent "0 7-19/2 * * 1-5"
 schedule br-personal-report br-personal-agent "30 6 * * 1-5"
 
-info "generating the first market report now (1-3 min) so the dashboard isn't empty ..."
-gcloud run jobs execute br-global-agent --region="$REGION" --wait --quiet >/dev/null \
-  || warn "first report failed; check logs: gcloud run jobs executions list --job=br-global-agent --region=$REGION"
+if [[ -z "${FIRST_REPORT_DONE:-}" ]]; then
+  info "generating the first market report now (1-3 min) so the dashboard isn't empty ..."
+  if gcloud run jobs execute br-global-agent --region="$REGION" --wait --quiet >/dev/null; then
+    echo "FIRST_REPORT_DONE=1" >> "$STATE_FILE"
+  else
+    warn "first report failed; check logs: gcloud run jobs executions list --job=br-global-agent --region=$REGION"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 bold "9/9  Health checks"
@@ -295,5 +309,6 @@ cat <<EOF
   Filings ingest:      gcloud run jobs executions list --job=br-rag-ingest --region=$REGION
   Logs:                https://console.cloud.google.com/run?project=$PROJECT_ID
 
+  Code change: git pull && ONLY="agent" bash deploy/deploy.sh   (or client, server ...)
   Demo day: re-run with MIN_INSTANCES=1 SKIP_BUILD=1 bash deploy/deploy.sh to avoid cold starts.
 EOF
