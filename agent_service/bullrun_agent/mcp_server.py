@@ -44,7 +44,8 @@ def _oauth_provider() -> GoogleOAuthProvider | None:
     clients = FirestoreClients(store.db) if hasattr(store, "db") else MemoryClients()
     return GoogleOAuthProvider(public_url=s.mcp_public_url, secret=s.session_secret,
                                google_client_id=s.google_client_id,
-                               google_client_secret=s.google_oauth_client_secret, clients=clients)
+                               google_client_secret=s.google_oauth_client_secret, clients=clients,
+                               on_connect=ds.get_user_store().mark_mcp_connected)
 
 
 oauth = _oauth_provider()

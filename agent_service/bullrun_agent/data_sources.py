@@ -297,6 +297,7 @@ def get_news(ticker: str, limit: int = 5, settings: Settings | None = None) -> d
 class UserStore(Protocol):
     def get_user(self, email: str) -> dict: ...
     def set_watchlist(self, email: str, tickers: list[str]) -> list[str]: ...
+    def mark_mcp_connected(self, email: str, client_name: str | None = None) -> None: ...
 
 
 class DemoUserStore:
@@ -328,6 +329,12 @@ class DemoUserStore:
             user["watchlist"] = tickers
         return tickers
 
+    def mark_mcp_connected(self, email: str, client_name: str | None = None) -> None:
+        user = self.get_user(email)
+        with self._lock:
+            user["mcp_connection"] = {"client": client_name or "MCP client",
+                                      "at": datetime.now(timezone.utc).isoformat()}
+
 
 class FirestoreUserStore:
     """Reads/writes the same `users/{email}` docs as the Flask server."""
@@ -356,6 +363,12 @@ class FirestoreUserStore:
         # merge=True deep-merges maps, so other onboarding answers are preserved.
         self.db.collection("users").document(self._key(email)).set({"onboarding": {"watchlist": tickers}}, merge=True)
         return tickers
+
+    def mark_mcp_connected(self, email: str, client_name: str | None = None) -> None:
+        # Shown on the app's "Use in Claude" panel so people can see the connection worked.
+        self.db.collection("users").document(self._key(email)).set(
+            {"mcp_connection": {"client": client_name or "MCP client", "at": datetime.now(timezone.utc).isoformat()}},
+            merge=True)
 
 
 @lru_cache

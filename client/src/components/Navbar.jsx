@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Sun, Bell, Calendar, X, Menu, Landmark } from 'lucide-react';
+import { Search, Sun, Bell, Calendar, X, Menu, Landmark, Plug } from 'lucide-react';
+import ClaudeConnectModal from './ClaudeConnectModal';
 import bullrunLogo from '../assets/br.png';
 
 function Navbar({ onLogout, user, theme, onThemeChange }) {
@@ -9,6 +10,7 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
   const [menuOpen, setMenuOpen] = useState(false); // profile dropdown
   const [themeOpen, setThemeOpen] = useState(false);
   const [showProModal, setShowProModal] = useState(false);
+  const [showClaude, setShowClaude] = useState(false);
 
   // Mobile UI
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -414,6 +416,15 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
           <span className="absolute inset-0 bg-green-400 opacity-0 group-active:opacity-20 transition-opacity duration-200 rounded-md" />
         </button>
 
+        <button
+          onClick={() => setShowClaude(true)}
+          title="Use BullRun in Claude"
+          className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-800 border border-green-200 bg-green-50 hover:bg-green-100 rounded-md cursor-pointer"
+        >
+          <Plug className="w-3.5 h-3.5" /> Use in Claude
+        </button>
+        <ClaudeConnectModal open={showClaude} onClose={() => setShowClaude(false)} user={user} />
+
         {/* Pro button hidden on very small screens */}
         <button
           onClick={() => setShowProModal(true)}
@@ -500,6 +511,12 @@ function Navbar({ onLogout, user, theme, onThemeChange }) {
           </button>
           {menuOpen && (
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-50">
+              <button
+                onClick={() => { setMenuOpen(false); setShowClaude(true); }}
+                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+              >
+                Use BullRun in Claude
+              </button>
               <button
                 onClick={() => { setMenuOpen(false); onLogout(); }}
                 className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"

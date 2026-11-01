@@ -127,6 +127,7 @@ def _safe_user_out(doc_dict: dict):
         "name": d.get("name", ""),
         "avatar": d.get("avatar", ""),
         "hasUserOnboarded": bool(d.get("hasUserOnboarded", False)),
+        "mcpConnection": d.get("mcp_connection"),
         "onboarding": {
             "goal": (ob or {}).get("goal", ""),
             "experience": (ob or {}).get("experience", ""),

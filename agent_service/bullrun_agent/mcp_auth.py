@@ -72,12 +72,13 @@ class GoogleOAuthProvider:
     """OAuthAuthorizationServerProvider for mcp.server.fastmcp, with Google as the identity provider."""
 
     def __init__(self, *, public_url: str, secret: str, google_client_id: str, google_client_secret: str,
-                 clients=None):
+                 clients=None, on_connect=None):
         self.public_url = public_url.rstrip("/")
         self.secret = secret
         self.google_client_id = google_client_id
         self.google_client_secret = google_client_secret
         self.clients = clients or MemoryClients()
+        self.on_connect = on_connect  # called with the email once a client finishes sign-in
 
     @property
     def callback_url(self) -> str:
@@ -157,6 +158,11 @@ class GoogleOAuthProvider:
 
     async def exchange_authorization_code(self, client: OAuthClientInformationFull,
                                           authorization_code: AuthorizationCode) -> OAuthToken:
+        if self.on_connect:
+            try:
+                self.on_connect(authorization_code.subject, client.client_name)
+            except Exception:  # bookkeeping only; never block a sign-in on it
+                pass
         return self._issue(client.client_id, authorization_code.subject, authorization_code.scopes,
                            authorization_code.resource)
 

@@ -221,7 +221,7 @@ if [[ -z "${SKIP_BUILD:-}" ]]; then
   if want client; then
     info "building br-client ..."
     gcloud builds submit client --config=deploy/client-build.yaml --quiet --suppress-logs \
-      --substitutions="_IMAGE=$IMG/br-client:latest,_VITE_APP_API_URL=$SERVER_URL,_VITE_APP_GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID,_VITE_AGENT_API_URL=$AGENT_URL" \
+      --substitutions="_IMAGE=$IMG/br-client:latest,_VITE_APP_API_URL=$SERVER_URL,_VITE_APP_GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID,_VITE_AGENT_API_URL=$AGENT_URL,_VITE_MCP_URL=$MCP_URL/mcp" \
       || die "Client build failed. See https://console.cloud.google.com/cloud-build/builds?project=$PROJECT_ID"
   fi
 else

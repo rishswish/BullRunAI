@@ -12,6 +12,8 @@ steps:
       - VITE_APP_GOOGLE_CLIENT_ID=${_VITE_APP_GOOGLE_CLIENT_ID}
       - --build-arg
       - VITE_AGENT_API_URL=${_VITE_AGENT_API_URL}
+      - --build-arg
+      - VITE_MCP_URL=${_VITE_MCP_URL}
       - .
 images:
   - ${_IMAGE}

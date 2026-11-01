@@ -96,7 +96,9 @@ def test_claude_can_sign_in_and_edit_the_users_watchlist(server):
     assert not err and '"status": "applied"' in text and "PLTR" in text
 
     from bullrun_agent import data_sources
-    assert "PLTR" in data_sources.get_user_store().get_user("investor@example.com")["watchlist"]
+    user = data_sources.get_user_store().get_user("investor@example.com")
+    assert "PLTR" in user["watchlist"]
+    assert user["mcp_connection"]["at"]  # the app's "Use in Claude" panel shows this
 
 
 def test_service_token_gets_public_tools_but_no_account(server):
