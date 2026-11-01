@@ -328,7 +328,8 @@ def get_portfolio(email: str, settings: Settings | None = None) -> dict:
     if holdings is None:
         if not s.allow_demo_data:
             return {"source": "none", "positions": [], "total_invested": 0,
-                    "note": "No brokerage account is connected. Connect one on the Portfolio page.",
+                    "note": "No holdings yet. On the Portfolio page the user can add positions under Manage holdings "
+                            "or connect a brokerage account.",
                     "watchlist": user.get("watchlist", [])}
         holdings = demo_data()["portfolio"]
 
