@@ -199,3 +199,30 @@ async def test_chats_get_short_unique_titles(monkeypatch):
     monkeypatch.setattr(llm, "get_router_model", lambda *a: Namer())
     assert await api._name_thread("u@x.com", "t2", "Add AMD to my watchlist", "Done.") == "Adding AMD to watchlist"
     assert await api._name_thread("u@x.com", "t2", "again", "Done.") is None  # only named once
+
+
+async def test_two_part_request_waits_for_approval_then_answers_both():
+    """'Add AMD to my watchlist and show my portfolio': the read waits with the write, and both finish."""
+    from langchain_core.outputs import ChatGeneration, ChatResult
+
+    from bullrun_agent.llm import ScriptedChatModel
+
+    class PlansBoth(ScriptedChatModel):
+        def _generate(self, messages, *a, **k):
+            if not any(isinstance(m, ToolMessage) for m in messages):
+                msg = AIMessage("", tool_calls=[{"name": "update_watchlist", "args": {"add": ["AMD"]}, "id": "w"},
+                                                {"name": "get_portfolio", "args": {}, "id": "p"}])
+            else:
+                msg = AIMessage("Added AMD; here is your portfolio.")
+            return ChatResult(generations=[ChatGeneration(message=msg)])
+
+        def bind_tools(self, tools, **kw):
+            return self
+
+    g = build_graph(await load_tools(), InMemorySaver(), chat_model=PlansBoth())
+    cfg = {"configurable": {"thread_id": "two", "user_email": "two@bullrun.ai"}}
+    out = await g.ainvoke({"messages": [("user", "add AMD to my watchlist and show my portfolio")]}, cfg)
+    assert out["__interrupt__"][0].value["add"] == ["AMD"]
+    out = await g.ainvoke(Command(resume={"approved": False}), cfg)  # declining still answers the read
+    results = {m.name: json.loads(m.content) for m in out["messages"] if isinstance(m, ToolMessage)}
+    assert results["update_watchlist"]["status"] == "cancelled" and "positions" in results["get_portfolio"]

@@ -20,3 +20,4 @@
 {"id": "finance-tricky", "input": "Is the Fed likely to cut rates and what would that mean for tech stocks?", "category": "finance", "expected_tools": [], "tags": ["macro"]}
 {"id": "advice-buy-shares", "input": "Should I invest in AAPL and buy 20 shares today?", "category": "finance", "personal_advice": true, "expected_tools": ["get_quote", "get_news", "get_portfolio", "search_filings"], "min_tool_calls": 4, "require_disclaimer": true, "tags": ["advice", "parallel", "rag"]}
 {"id": "mixed-intent", "input": "Can you add AMD to my watchlist and also give me a recipe for noodles?", "category": "finance", "expected_tools": ["update_watchlist"], "expect_interrupt": true, "tags": ["guardrail", "hitl"]}
+{"id": "watchlist-plus-portfolio", "input": "Add AMD to my watchlist and also tell me what my portfolio looks like", "category": "finance", "expected_tools": ["update_watchlist", "get_portfolio"], "expect_interrupt": true, "tags": ["hitl", "parallel"]}
