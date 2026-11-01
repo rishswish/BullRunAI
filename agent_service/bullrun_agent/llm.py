@@ -30,10 +30,13 @@ def get_chat_model(settings: Settings | None = None, *, model: str | None = None
     name = model or s.llm_model
     temp = s.llm_temperature if temperature is None else temperature
 
+    # with a backup configured, fail over fast instead of retrying a rate-limited provider
+    retries = 1 if s.fallback_provider else 3
     if s.llm_provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        return ChatGoogleGenerativeAI(model=name, temperature=temp, google_api_key=s.google_api_key, max_retries=3)
+        return ChatGoogleGenerativeAI(model=name, temperature=temp, google_api_key=s.google_api_key,
+                                      max_retries=retries)
     if s.llm_provider == "openai":
         from langchain_openai import ChatOpenAI
 
@@ -42,7 +45,7 @@ def get_chat_model(settings: Settings | None = None, *, model: str | None = None
         kwargs = {} if fixed_temp else {"temperature": temp}
         if name.startswith("gpt-5"):
             kwargs["reasoning_effort"] = "low"  # default effort makes each tool step 10s+
-        return ChatOpenAI(model=name, api_key=s.openai_api_key, max_retries=3, **kwargs)
+        return ChatOpenAI(model=name, api_key=s.openai_api_key, max_retries=retries, **kwargs)
     if s.llm_provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
@@ -53,6 +56,15 @@ def get_chat_model(settings: Settings | None = None, *, model: str | None = None
 def get_router_model(settings: Settings | None = None) -> BaseChatModel:
     s = settings or get_settings()
     return get_chat_model(s, model=s.router_model or s.llm_model, temperature=0)
+
+
+def get_fallback_settings(settings: Settings | None = None) -> Settings | None:
+    """Settings for the backup provider, or None if no backup is configured."""
+    s = settings or get_settings()
+    if not s.fallback_provider or s.fallback_provider == s.llm_provider:
+        return None
+    return s.model_copy(update={"llm_provider": s.fallback_provider, "llm_model": s.fallback_model,
+                                "router_model": None, "fallback_provider": None})
 
 
 # ---------------------------------------------------------------------------
@@ -88,15 +100,9 @@ class ScriptedChatModel(BaseChatModel):
     def with_structured_output(self, schema: Any, **kwargs: Any):  # type: ignore[override]
         model = self
 
-        class _Structured:
-            def invoke(self, messages, config=None):
-                text = _last_human(messages)
-                return schema(**model._route(text))
+        from langchain_core.runnables import RunnableLambda
 
-            async def ainvoke(self, messages, config=None):
-                return self.invoke(messages, config)
-
-        return _Structured()
+        return RunnableLambda(lambda messages: schema(**model._route(_last_human(messages))))
 
     # -- routing heuristics ---------------------------------------------------
     @staticmethod

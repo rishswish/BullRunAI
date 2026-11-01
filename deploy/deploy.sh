@@ -132,6 +132,7 @@ ensure_secret polygon-api-key       "Massive/Polygon API key (required, charts +
 ensure_secret snaptrade-consumer-key "SnapTrade consumer key (optional, brokerage linking)" no
 ensure_secret snaptrade-client-id   "SnapTrade client id (optional)" no
 ensure_secret langsmith-api-key     "LangSmith API key (optional, agent tracing)" no
+ensure_secret openai-api-key        "OpenAI API key (optional, backup model if Gemini is rate-limited)" no
 
 # Build the --set-secrets lists from what exists.
 secrets_flag() {  # pairs: ENV_NAME=secret-name ...
@@ -142,11 +143,12 @@ secrets_flag() {  # pairs: ENV_NAME=secret-name ...
   echo "$out"
 }
 AGENT_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key \
-  LANGSMITH_API_KEY=langsmith-api-key SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
+  LANGSMITH_API_KEY=langsmith-api-key OPENAI_API_KEY=openai-api-key SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
 MCP_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key)
 SERVER_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key \
   SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
 TRACING=false; [[ -n "${HAVE[langsmith-api-key]:-}" ]] && TRACING=true
+FALLBACK=""; [[ -n "${HAVE[openai-api-key]:-}" ]] && FALLBACK=";FALLBACK_PROVIDER=openai;FALLBACK_MODEL=${FALLBACK_MODEL:-gpt-4.1-mini}"
 
 # ---------------------------------------------------------------------------
 bold "4/9  Service account, Firestore, storage, image registry"
@@ -240,7 +242,7 @@ gcloud run deploy br-mcp --image="$IMG/br-agent:latest" "${COMMON[@]}" \
 info "br-agent ..."
 # max-instances=1 because chat memory is in-process; set CHECKPOINT_DB_URL (Postgres) to scale out.
 gcloud run deploy br-agent --image="$IMG/br-agent:latest" "${COMMON[@]}" \
-  --set-env-vars="^;^ALLOW_DEMO_DATA=false;LLM_PROVIDER=gemini;LLM_MODEL=$LLM_MODEL;ROUTER_MODEL=$ROUTER_MODEL;EMBEDDING_PROVIDER=gemini;TOOLS_MODE=mcp;MCP_SERVER_URL=$MCP_URL/mcp;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;CORS_ORIGINS=$CLIENT_URL,http://localhost:5173;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;LANGSMITH_TRACING=$TRACING;LANGSMITH_PROJECT=bullrun-agent" \
+  --set-env-vars="^;^ALLOW_DEMO_DATA=false;LLM_PROVIDER=gemini;LLM_MODEL=$LLM_MODEL;ROUTER_MODEL=$ROUTER_MODEL;EMBEDDING_PROVIDER=gemini;TOOLS_MODE=mcp;MCP_SERVER_URL=$MCP_URL/mcp;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;CORS_ORIGINS=$CLIENT_URL,http://localhost:5173;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;LANGSMITH_TRACING=$TRACING;LANGSMITH_PROJECT=bullrun-agent$FALLBACK" \
   --set-secrets="$AGENT_SECRETS" --memory=1Gi --cpu=1 --timeout=300 --concurrency=40 \
   --min-instances="$MIN_INSTANCES" --max-instances=1 --cpu-boost --allow-unauthenticated >/dev/null
 

@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # Cheaper/faster model used for the guardrail router and the eval judge.
     router_model: str | None = None
     llm_temperature: float = 0.2
+    # Backup provider used when the primary errors (rate limit, outage), e.g. openai / gpt-4.1-mini.
+    fallback_provider: Literal["gemini", "openai", "anthropic", "fake"] | None = None
+    fallback_model: str = "gpt-4.1-mini"
     embedding_provider: Literal["gemini", "openai", "hash"] = "gemini"
     embedding_model: str = "models/gemini-embedding-001"
 

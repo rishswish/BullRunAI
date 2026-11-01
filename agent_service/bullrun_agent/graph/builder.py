@@ -31,7 +31,7 @@ from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
 
 from ..config import Settings, get_settings
-from ..llm import get_chat_model, get_router_model
+from ..llm import get_chat_model, get_fallback_settings, get_router_model
 from . import prompts
 
 
@@ -65,8 +65,15 @@ class RouteDecision(BaseModel):
 def build_graph(tools: list[BaseTool], checkpointer=None, settings: Settings | None = None,
                 chat_model=None, router_model=None):
     s = settings or get_settings()
-    llm = (chat_model or get_chat_model(s)).bind_tools(tools)
+    base = chat_model or get_chat_model(s)
+    llm = base.bind_tools(tools)
     router = (router_model or get_router_model(s)).with_structured_output(RouteDecision)
+    fb = get_fallback_settings(s) if chat_model is None else None
+    if fb:  # e.g. Gemini rate-limited -> same turn retried on OpenAI
+        backup = get_chat_model(fb)
+        llm = llm.with_fallbacks([backup.bind_tools(tools)])
+        router = router.with_fallbacks([get_chat_model(fb, temperature=0).with_structured_output(RouteDecision)])
+        base = base.with_fallbacks([backup])
 
     # -- nodes ---------------------------------------------------------------
     async def guardrail(state: AgentState) -> dict:
@@ -82,7 +89,7 @@ def build_graph(tools: list[BaseTool], checkpointer=None, settings: Settings | N
         steps = state.get("steps", 0) + 1
         model = llm
         if steps > s.max_agent_steps:  # loop guard: force a final answer without more tools
-            model = chat_model or get_chat_model(s)
+            model = base
             history = [*history, HumanMessage("Tool budget reached. Answer now with what you have.")]
         response = await model.ainvoke([system, *history], config)
         return {"messages": [response], "steps": steps}

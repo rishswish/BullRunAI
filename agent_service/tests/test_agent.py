@@ -111,3 +111,24 @@ def test_trim_keeps_current_turn_and_drops_old_by_tokens():
     out = trim_history(old + current, 22000)
     assert out[0].content == "old q2" and out[-3:] == current
     assert len(trim_history(old + current, 100000)) == len(old) + len(current)
+
+
+async def test_falls_back_to_backup_provider(monkeypatch):
+    from bullrun_agent.config import get_settings
+    from bullrun_agent.graph import builder
+    from bullrun_agent.llm import ScriptedChatModel
+
+    class RateLimited(ScriptedChatModel):
+        def _generate(self, *a, **k):
+            raise RuntimeError("429 RESOURCE_EXHAUSTED")
+
+        async def _agenerate(self, *a, **k):
+            raise RuntimeError("429 RESOURCE_EXHAUSTED")
+
+    s = get_settings().model_copy(update={"llm_provider": "fake", "fallback_provider": "openai"})
+    monkeypatch.setattr(builder, "get_chat_model", lambda st, **k: RateLimited() if st.llm_provider == "fake"
+                        else ScriptedChatModel())
+    monkeypatch.setattr(builder, "get_router_model", lambda st: RateLimited())
+    g = builder.build_graph(await load_tools(), InMemorySaver(), s)
+    out = await g.ainvoke({"messages": [("user", "price of NVDA")]}, CFG)
+    assert out["category"] == "finance" and "get_quote" in _tools_called(out)
