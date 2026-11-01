@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from collections import defaultdict, deque
@@ -153,6 +154,11 @@ def _sse(event: str, data: Any) -> dict:
 def _snippet(text: str, n: int = 140) -> str:
     body = text.split("\n", 1)[-1] if text.startswith("[") else text  # drop the "[AAPL 10-Q ...]" header line
     body = " ".join(body.split())
+    if body and not body[0].isupper():  # chunks overlap, so many start mid-sentence: skip to the next one
+        cut = body.find(". ", 0, 220)
+        if cut != -1:
+            body = body[cut + 2:]
+    body = re.sub(r"^Item \d+[A-Z]?\.\s+[A-Z][\w ]+?(?= The | Our | We )\s*", "", body)  # drop "Item 1A. Risk Factors"
     return body if len(body) <= n else body[:n].rsplit(" ", 1)[0] + "…"
 
 
