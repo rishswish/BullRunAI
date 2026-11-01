@@ -90,18 +90,34 @@ function ApprovalCard({ approval, onDecide }) {
   );
 }
 
-function Citations({ citations }) {
+function Citations({ citations, text }) {
   if (!citations?.length) return null;
+  // Only list passages the answer actually cites (all of them if it cites none), grouped by filing.
+  const cited = new Set((text || '').match(/\[S\d+\]/g)?.map((x) => x.slice(1, -1)) || []);
   const seen = new Set();
-  const unique = citations.filter((c) => !seen.has(c.id) && seen.add(c.id));
+  const used = citations.filter((c) => (!cited.size || cited.has(c.id)) && !seen.has(c.id) && seen.add(c.id));
+  const docs = [];
+  for (const c of used) {
+    const key = `${c.ticker}|${c.form}|${c.filed}`;
+    let d = docs.find((x) => x.key === key);
+    if (!d) docs.push((d = { key, title: `${c.ticker} ${c.form} filed ${c.filed}`, url: c.url, passages: [] }));
+    d.passages.push(c);
+  }
   return (
-    <div className="mt-2 pt-1.5 border-t border-gray-200 space-y-0.5">
+    <div className="mt-2 pt-1.5 border-t border-gray-200 space-y-1.5">
       <div className="text-[10px] font-semibold text-gray-500">Sources</div>
-      {unique.map((c) => (
-        <a key={c.id} href={c.url} target="_blank" rel="noreferrer"
-          className="block text-[10px] text-green-700 hover:underline truncate">
-          [{c.id}] {c.ticker} {c.form} ({c.filed}), {c.section}
-        </a>
+      {docs.map((d) => (
+        <div key={d.key}>
+          <a href={d.url} target="_blank" rel="noreferrer" className="text-[10px] font-medium text-green-700 hover:underline">
+            {d.title} ↗
+          </a>
+          {d.passages.map((c) => (
+            <p key={c.id} className="text-[10px] text-gray-500 leading-snug pl-2" title={c.snippet}>
+              <span className="font-semibold text-gray-600">[{c.id}]</span> {c.section}
+              {c.snippet ? <span className="italic"> · “{c.snippet}”</span> : null}
+            </p>
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -163,7 +179,7 @@ function Bubble({ msg, onDecide, onRate }) {
             </div>
           ) : null}
           {!isUser && <ApprovalCard approval={msg.approval} onDecide={onDecide} />}
-          {!isUser && <Citations citations={msg.citations} />}
+          {!isUser && <Citations citations={msg.citations} text={msg.text} />}
         </div>
         <p className="text-[9px] text-gray-400 mt-0.5 px-1">
           {msg.time}

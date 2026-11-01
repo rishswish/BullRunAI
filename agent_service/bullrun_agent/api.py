@@ -150,6 +150,12 @@ def _sse(event: str, data: Any) -> dict:
     return {"event": event, "data": json.dumps(data, default=str)}
 
 
+def _snippet(text: str, n: int = 140) -> str:
+    body = text.split("\n", 1)[-1] if text.startswith("[") else text  # drop the "[AAPL 10-Q ...]" header line
+    body = " ".join(body.split())
+    return body if len(body) <= n else body[:n].rsplit(" ", 1)[0] + "…"
+
+
 def _summarize_tool(msg: ToolMessage) -> tuple[str, list[dict]]:
     """Short human-readable summary of a tool result + any filing citations."""
     raw = _text_of(msg.content)
@@ -170,7 +176,7 @@ def _summarize_tool(msg: ToolMessage) -> tuple[str, list[dict]]:
         return f"{len(data.get('positions', []))} positions, ${data.get('total_invested'):,} invested", []
     if msg.name == "search_filings":
         res = data.get("results", [])
-        cites = [{"id": r["source_id"], **r["citation"]} for r in res]
+        cites = [{"id": r["source_id"], **r["citation"], "snippet": _snippet(r.get("text", ""))} for r in res]
         return f"{len(res)} filing passages", cites
     if msg.name == "update_watchlist":
         return data.get("status", "done"), []
