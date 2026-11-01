@@ -59,6 +59,13 @@ $env:TOOLS_MODE = "local"
 $env:VITE_APP_API_URL = "http://localhost:5000"
 $env:VITE_AGENT_API_URL = "http://localhost:8080"
 $env:VITE_APP_GOOGLE_CLIENT_ID = $vars["GOOGLE_CLIENT_ID"]
+# Also write them for Vite directly, so a plain `npm run dev` in client\ works too (git-ignored).
+Set-Content -Path (Join-Path $root "client\.env.local") -Value @(
+    "VITE_APP_API_URL=http://localhost:5000",
+    "VITE_AGENT_API_URL=http://localhost:8080",
+    "VITE_APP_GOOGLE_CLIENT_ID=$($vars["GOOGLE_CLIENT_ID"])"
+)
+Write-Host "Using Google client id: $($vars["GOOGLE_CLIENT_ID"])"
 
 $server = Join-Path $root "server"
 $agent = Join-Path $root "agent_service"
