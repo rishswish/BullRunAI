@@ -25,4 +25,4 @@ USER appuser
 EXPOSE 8080
 
 # Set the entry point to run your Python script with Gunicorn
-ENTRYPOINT ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"]
+ENTRYPOINT ["gunicorn", "--bind", "0.0.0.0:8080", "--threads", "8", "--timeout", "150", "app:app"]

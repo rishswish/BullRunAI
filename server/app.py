@@ -11,6 +11,7 @@ import os
 import uuid
 import re
 import requests
+import threading
 import time
 # Forcing IPv4
 import socket
@@ -585,36 +586,7 @@ def get_market_summary():
         except Exception:
             date_str = ''
 
-        # === Market snapshot + lists ===
-        api_key = os.environ.get("POLYGON_API_KEY")
-        def _get(url, params=None):
-            if not api_key:
-                raise RuntimeError("Missing POLYGON_API_KEY")
-            q = dict(params or {})
-            q["apiKey"] = api_key
-            r = requests.get(url, params=q, timeout=10)
-            r.raise_for_status()
-            return r.json()
-
-        # Price/change for SPY from snapshot
-        spy_last = None
-        spy_chg = None
-        spy_chg_pct = None
-        spy_prev_close = None
-        try:
-            snap = _get("https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/SPY") or {}
-            t = snap.get("ticker") or {}
-            last_price = (t.get("lastTrade") or {}).get("p") or (t.get("day") or {}).get("c")
-            prev_close = (t.get("prevDay") or {}).get("c")
-            spy_last = last_price
-            spy_prev_close = prev_close
-            if isinstance(last_price, (int, float)) and isinstance(prev_close, (int, float)) and prev_close not in (0, 0.0):
-                spy_chg = float(last_price) - float(prev_close)
-                spy_chg_pct = (spy_chg / float(prev_close)) * 100.0
-        except Exception as e:
-            print(f"[GET /api/market-summary] Snapshot fetch failed for SPY: {e}")
-
-        # Reusable formatters
+        # === Market data: Finnhub real-time quotes, movers from Polygon end-of-day bars ===
         def _fmt_price(p):
             try:
                 return f"{float(p):.2f}"
@@ -631,145 +603,69 @@ def get_market_summary():
             except Exception:
                 return "+0.00%"
 
-        # Top Movers (existing - kept for compatibility, but frontend won't use)
-        top_stocks = []
+        def _quote_row(sym, eod=None):
+            q = _finnhub_quote(sym)
+            if q:
+                return {"symbol": sym, "name": sym, "price": _fmt_price(q.get("c")),
+                        "change": _fmt_signed(q.get("d")), "changePercent": _fmt_signed_pct(q.get("dp"))}, q
+            if eod:  # fall back to the latest close
+                _, last, prev = eod
+                b, pb = last.get(sym), prev.get(sym)
+                if b and pb and pb.get("c"):
+                    ch = b["c"] - pb["c"]
+                    return {"symbol": sym, "name": sym, "price": _fmt_price(b["c"]), "change": _fmt_signed(ch),
+                            "changePercent": _fmt_signed_pct(100 * ch / pb["c"])}, None
+            return None, None
 
-        
         try:
-            gainers = _get("https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/gainers") or {}
-            losers = _get("https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/losers") or {}
-            gl = (gainers.get("tickers") or [])[:15] + (losers.get("tickers") or [])[:15]
-            for it in gl:
-                sym = it.get("ticker")
-                price = None
-                last_trade = it.get("lastTrade") or {}
-                price = last_trade.get("p") if isinstance(last_trade, dict) else None
-                if price is None:
-                    day = it.get("day") or {}
-                    price = day.get("c")
-                ch = it.get("todaysChange")
-                chp = it.get("todaysChangePerc")
-                top_stocks.append({
-                    "symbol": sym or "",
-                    "name": sym or "",
-                    "price": _fmt_price(price),
-                    "change": _fmt_signed(ch),
-                    "changePercent": _fmt_signed_pct(chp),
-                })
-            # sort by absolute % change and take top 25
-            def _abs_pct(x):
-                try:
-                    return abs(float((x.get("changePercent") or "0").replace('%','')))
-                except Exception:
-                    return 0.0
-            top_stocks.sort(key=_abs_pct, reverse=True)
-            top_stocks = top_stocks[:25]
+            eod = _eod_quotes()
         except Exception as e:
-            print(f"[GET /api/market-summary] Top movers fetch failed: {e}")
-            top_stocks = []
+            print(f"[GET /api/market-summary] EOD bars unavailable: {e}")
+            eod = None
 
-        # NEW: User watchlist quotes
-        watchlist_stocks = []
-        watchlist_news = []  # Add this new list
-        seen_news_urls = set()  # Track unique news URLs for deduplication
-        
-        try:
-            uref = _get_user_doc_ref(client, email)
-            usnap = uref.get()
-            udoc = (usnap.to_dict() or {}) if usnap else {}
-            wl = ((udoc.get("onboarding") or {}).get("watchlist") or [])
-            if isinstance(wl, list):
-                syms = [str(x).strip().upper() for x in wl if str(x).strip()]
-            else:
-                syms = []
-            for sym in syms[:25]:
-                try:
-                    s = _get(f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{sym}") or {}
-                    t = s.get("ticker") or {}
-                    last_price = (t.get("lastTrade") or {}).get("p") or (t.get("day") or {}).get("c")
-                    prev_c = (t.get("prevDay") or {}).get("c")
-                    ch = None; chp = None
-                    if isinstance(last_price,(int,float)) and isinstance(prev_c,(int,float)) and prev_c not in (0,0.0):
-                        ch = float(last_price) - float(prev_c)
-                        chp = (ch / float(prev_c)) * 100.0
-                    watchlist_stocks.append({
-                        "symbol": sym,
-                        "name": sym,
-                        "price": _fmt_price(last_price),
-                        "change": _fmt_signed(ch),
-                        "changePercent": _fmt_signed_pct(chp),
-                    })
-                    
-                    # Fetch 2 news articles for this ticker
-                    try:
-                        ticker_news = _get(
-                            "https://api.polygon.io/v2/reference/news",
-                            params={"ticker": sym, "order": "desc", "limit": 2, "sort": "published_utc"},
-                        ) or {}
-                        news_results = ticker_news.get("results") or []
-                        for item in news_results:
-                            news_url = item.get("article_url") or item.get("url")
-                            # Deduplicate by URL
-                            if news_url and news_url not in seen_news_urls:
-                                seen_news_urls.add(news_url)
-                                img = item.get("image_url")
-                                if not img:
-                                    imgs = item.get("images") or []
-                                    if isinstance(imgs, list) and imgs:
-                                        img = imgs[0].get("url")
-                                watchlist_news.append({
-                                    "ticker": sym,
-                                    "title": item.get("title"),
-                                    "date": item.get("published_utc"),
-                                    "summary": item.get("description"),
-                                    "url": news_url,
-                                    "image": img,
-                                    "publisher": item.get("publisher")
-                                })
-                    except Exception as e:
-                        print(f"[GET /api/market-summary] News fetch failed for {sym}: {e}")
-                        continue
-                        
-                except Exception as e:
-                    print(f"[GET /api/market-summary] Watchlist quote failed for {sym}: {e}")
+        spy_last = spy_prev_close = spy_chg = spy_chg_pct = None
+        _, spy_q = _quote_row("SPY")
+        if spy_q:
+            spy_last, spy_prev_close, spy_chg, spy_chg_pct = spy_q.get("c"), spy_q.get("pc"), spy_q.get("d"), spy_q.get("dp")
+        elif eod and eod[1].get("SPY") and eod[2].get("SPY"):
+            spy_last, spy_prev_close = eod[1]["SPY"]["c"], eod[2]["SPY"]["c"]
+            spy_chg = spy_last - spy_prev_close
+            spy_chg_pct = 100 * spy_chg / spy_prev_close
+
+        # Biggest movers of the last session among liquid names (price >= $5, volume >= 1M)
+        top_stocks = []
+        if eod:
+            _, last, prev = eod
+            movers = []
+            for sym, b in last.items():
+                pb = prev.get(sym)
+                if not pb or not pb.get("c") or not _TICKER_RE.match(sym) or "." in sym:
                     continue
+                if b.get("c", 0) < 5 or b.get("v", 0) < 1_000_000:
+                    continue
+                ch = b["c"] - pb["c"]
+                movers.append((abs(ch / pb["c"]), {"symbol": sym, "name": sym, "price": _fmt_price(b["c"]),
+                                                   "change": _fmt_signed(ch),
+                                                   "changePercent": _fmt_signed_pct(100 * ch / pb["c"])}))
+            top_stocks = [m for _, m in sorted(movers, key=lambda x: x[0], reverse=True)[:25]]
+
+        watchlist_stocks = []
+        watchlist_news = []
+        seen_news_urls = set()
+        try:
+            udoc = (_get_user_doc_ref(client, email).get().to_dict() or {})
+            wl = (udoc.get("onboarding") or {}).get("watchlist") or []
+            syms = [str(x).strip().upper() for x in wl if str(x).strip()] if isinstance(wl, list) else []
+            for sym in syms[:25]:
+                row, _ = _quote_row(sym, eod)
+                if row:
+                    watchlist_stocks.append(row)
+                for item in _finnhub_news(sym, 2):
+                    if item["url"] not in seen_news_urls:
+                        seen_news_urls.add(item["url"])
+                        watchlist_news.append(item)
         except Exception as e:
             print(f"[GET /api/market-summary] Watchlist load failed: {e}")
-            watchlist_stocks = []
-            watchlist_news = []
-            
-        # NEW: Top Movers by Volume (most active)
-        top_volume_stocks = []
-        try:
-            actives = _get("https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/most_active") or {}
-            rows = (actives.get("tickers") or [])[:50]
-            for it in rows:
-                sym = it.get("ticker")
-                day = it.get("day") or {}
-                last_trade = it.get("lastTrade") or {}
-                price = last_trade.get("p") if isinstance(last_trade, dict) else None
-                if price is None:
-                    price = day.get("c")
-                ch = it.get("todaysChange")
-                chp = it.get("todaysChangePerc")
-                vol = day.get("v") or it.get("volume") or 0
-                try:
-                    vol_int = int(vol or 0)
-                except Exception:
-                    vol_int = 0
-                top_volume_stocks.append({
-                    "symbol": sym or "",
-                    "name": sym or "",
-                    "price": _fmt_price(price),
-                    "change": _fmt_signed(ch),
-                    "changePercent": _fmt_signed_pct(chp),
-                    "volume": vol_int,
-                })
-            top_volume_stocks.sort(key=lambda x: x.get("volume", 0), reverse=True)
-            top_volume_stocks = top_volume_stocks[:25]
-        except Exception as e:
-            print(f"[GET /api/market-summary] Top volume fetch failed: {e}")
-            top_volume_stocks = []
 
         data = {
             'greeting': 'Hi, ',
@@ -867,6 +763,41 @@ def snaptrade_connect_url():
 # Manual holdings (for users without a linked brokerage) + end-of-day pricing
 # ---------------------------------------------------------------------------
 _EOD_CACHE = {}  # date -> (fetched_at, {ticker: bar})
+_POLY_CACHE = {}  # url -> (fetched_at, json)
+_POLY_CALLS = []  # timestamps of recent Polygon calls
+_POLY_LOCK = threading.Lock()
+POLY_PER_MIN = int(os.environ.get("POLYGON_PER_MIN", "5"))  # free plan
+
+
+def _polygon_json(url, params=None, ttl=3600):
+    """GET a Polygon endpoint with caching and a client-side rate limit (waits instead of hitting 429)."""
+    key = url + "?" + "&".join(f"{k}={v}" for k, v in sorted((params or {}).items()))
+    hit = _POLY_CACHE.get(key)
+    if hit and time.time() - hit[0] < ttl:
+        return hit[1]
+    api_key = os.environ.get("POLYGON_API_KEY")
+    if not api_key:
+        raise RuntimeError("POLYGON_API_KEY not set")
+    with _POLY_LOCK:
+        hit = _POLY_CACHE.get(key)  # another thread may have fetched it while we waited
+        if hit and time.time() - hit[0] < ttl:
+            return hit[1]
+        for _ in range(3):
+            now = time.time()
+            _POLY_CALLS[:] = [c for c in _POLY_CALLS if now - c < 60]
+            if len(_POLY_CALLS) >= POLY_PER_MIN:
+                time.sleep(60 - (now - _POLY_CALLS[0]) + 0.5)
+                continue
+            _POLY_CALLS.append(now)
+            r = requests.get(url, params={**(params or {}), "apiKey": api_key}, timeout=20)
+            if r.status_code == 429:
+                time.sleep(12)
+                continue
+            r.raise_for_status()
+            data = r.json()
+            _POLY_CACHE[key] = (time.time(), data)
+            return data
+    raise RuntimeError("Polygon rate limit")
 _QUOTE_CACHE = {}  # symbol -> (fetched_at, quote)
 
 
@@ -897,13 +828,9 @@ def _grouped_bars(day_str):
     hit = _EOD_CACHE.get(day_str)
     if hit and time.time() - hit[0] < 3600:
         return hit[1]
-    api_key = os.environ.get("POLYGON_API_KEY")
-    if not api_key:
-        raise RuntimeError("POLYGON_API_KEY not set")
-    r = requests.get(f"https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{day_str}",
-                     params={"adjusted": "true", "apiKey": api_key}, timeout=20)
-    r.raise_for_status()
-    bars = {b["T"]: b for b in (r.json().get("results") or [])}
+    data = _polygon_json(f"https://api.polygon.io/v2/aggs/grouped/locale/us/market/stocks/{day_str}",
+                         {"adjusted": "true"})
+    bars = {b["T"]: b for b in (data.get("results") or [])}
     _EOD_CACHE[day_str] = (time.time(), bars)
     return bars
 
@@ -914,13 +841,44 @@ def _eod_quotes():
     found = []
     d = date.today()
     for _ in range(10):
-        bars = _grouped_bars(d.isoformat())
-        if bars:
-            found.append((d.isoformat(), bars))
-            if len(found) == 2:
-                return found[0][0], found[0][1], found[1][1]
+        if d.weekday() < 5:  # weekends never have bars, don't spend a call
+            bars = _grouped_bars(d.isoformat())
+            if bars:
+                found.append((d.isoformat(), bars))
+                if len(found) == 2:
+                    return found[0][0], found[0][1], found[1][1]
         d -= timedelta(days=1)
     raise RuntimeError("no recent sessions from Polygon")
+
+
+_NEWS_CACHE = {}  # symbol -> (fetched_at, [articles])
+
+
+def _finnhub_news(sym, limit=2):
+    """Latest company news from Finnhub in the shape the dashboard expects. Cached 15 min."""
+    hit = _NEWS_CACHE.get(sym)
+    if hit and time.time() - hit[0] < 900:
+        return hit[1][:limit]
+    key = os.environ.get("FINNHUB_API_KEY")
+    if not key:
+        return []
+    from datetime import date, timedelta
+    try:
+        r = requests.get("https://finnhub.io/api/v1/company-news", timeout=8, params={
+            "symbol": sym, "from": (date.today() - timedelta(days=7)).isoformat(),
+            "to": date.today().isoformat(), "token": key})
+        r.raise_for_status()
+        items = r.json() or []
+    except Exception as e:
+        print(f"[finnhub] news failed for {sym}: {e}")
+        return []
+    out = [{"ticker": sym, "title": it.get("headline"), "summary": it.get("summary"), "url": it.get("url"),
+            "image": it.get("image") or None,
+            "date": datetime.utcfromtimestamp(it["datetime"]).isoformat() + "Z" if it.get("datetime") else None,
+            "publisher": {"name": it.get("source")}}
+           for it in sorted(items, key=lambda x: x.get("datetime", 0), reverse=True) if it.get("url")]
+    _NEWS_CACHE[sym] = (time.time(), out)
+    return out[:limit]
 
 
 def _clean_holdings(raw):
@@ -1418,17 +1376,13 @@ def get_ticker_details(ticker: str):
             print(f"[GET /api/ticker/<ticker>] ERROR: Invalid ticker provided")
             return jsonify({"error": "Invalid ticker"}), 400
 
-        def _get(url, params=None):
-            q = dict(params or {})
-            q["apiKey"] = api_key
-            r = requests.get(url, params=q, timeout=10)
-            r.raise_for_status()
-            return r.json()
+        def _get(url, params=None, ttl=900):
+            return _polygon_json(url, params, ttl=ttl)
 
         # 1) v3 Reference: company details
         details = {}
         try:
-            details = _get(f"https://api.polygon.io/v3/reference/tickers/{sym}")
+            details = _get(f"https://api.polygon.io/v3/reference/tickers/{sym}", ttl=86400)
             print(f"[GET /api/ticker/<ticker>] Fetched ticker details for: {sym}")
         except Exception as e:
             print(f"[GET /api/ticker/<ticker>] Details fetch failed for {sym}: {e}")
@@ -1448,15 +1402,14 @@ def get_ticker_details(ticker: str):
             last_price, prev_c = fq["c"], fq.get("pc")
             day_vals = {"o": fq.get("o"), "h": fq.get("h"), "l": fq.get("l"), "c": fq["c"], "v": None, "vw": None}
         else:
-            try:
-                snap = _get(f"https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/{sym}") or {}
-                t = snap.get("ticker") or {}
-                last_price = (t.get("lastTrade") or {}).get("p") or (t.get("day") or {}).get("c")
-                d = t.get("day") or {}
+            try:  # latest close from end-of-day bars
+                _, last_bars, prev_bars = _eod_quotes()
+                d = last_bars.get(sym) or {}
+                last_price = d.get("c")
                 day_vals = {k: d.get(k) for k in ("o", "h", "l", "c", "v", "vw")}
-                prev_c = (t.get("prevDay") or {}).get("c")
+                prev_c = (prev_bars.get(sym) or {}).get("c")
             except Exception as e:
-                print(f"[GET /api/ticker/<ticker>] Snapshot fetch failed for {sym}: {e}")
+                print(f"[GET /api/ticker/<ticker>] EOD fallback failed for {sym}: {e}")
 
         change = None
         change_percent = None
@@ -1560,17 +1513,6 @@ def get_chart_timeframe():
         benchmarks_param = request.args.get('benchmarks', '')
         print(f"[GET /api/chart/timeframe] User: {email}, ticker: {sym}, tf: {tf}")
 
-        api_key = os.environ.get("POLYGON_API_KEY")
-        if not api_key:
-            return jsonify({"error": "Missing POLYGON_API_KEY"}), 500
-
-        def _get(url, params=None):
-            q = dict(params or {})
-            q["apiKey"] = api_key
-            r = requests.get(url, params=q, timeout=10)
-            r.raise_for_status()
-            return r.json()
-
         # Parse benchmark configs
         benchmark_configs = []
         if benchmarks_param:
@@ -1585,114 +1527,58 @@ def get_chart_timeframe():
                     symbol = parts[0].strip().upper()
                     benchmark_configs.append({'symbol': symbol, 'key': symbol.lower(), 'label': symbol})
 
-        from datetime import timedelta, date, datetime
+        from datetime import timedelta, date, datetime, timezone
+        from zoneinfo import ZoneInfo
+        ny = ZoneInfo("America/New_York")
         today = date.today()
-        today_str = today.isoformat()
 
-        def _get_last_trading_day():
-            current = date.today()
-            for days_back in range(0, 8):
-                check_date = current - timedelta(days=days_back)
-                if check_date.weekday() < 5:
-                    return check_date
-            return current - timedelta(days=3)
+        # Two Polygon calls per symbol cover every timeframe: 5-min bars for the last week
+        # (1D, 5D) and two years of daily bars (1M..ALL; the free plan keeps ~2 years).
+        def _bars(sym, kind):
+            if kind == "intraday":
+                url = f"https://api.polygon.io/v2/aggs/ticker/{sym}/range/5/minute/{(today - timedelta(days=8)).isoformat()}/{today.isoformat()}"
+                ttl = 600
+            else:
+                url = f"https://api.polygon.io/v2/aggs/ticker/{sym}/range/1/day/{(today - timedelta(days=730)).isoformat()}/{today.isoformat()}"
+                ttl = 3600
+            data = _polygon_json(url, {"adjusted": "true", "sort": "asc", "limit": 50000}, ttl=ttl)
+            return [r for r in (data.get("results") or []) if isinstance(r.get("t"), (int, float)) and isinstance(r.get("c"), (int, float))]
 
         def _series_for_tf(ticker_sym: str, tf_key: str):
             tf_key = (tf_key or '').upper()
-            if tf_key == '1D':
-                try:
-                    last_trading_day = _get_last_trading_day()
-                    from_1d = (last_trading_day - timedelta(days=7)).isoformat()
-                    aggs = _get(
-                        f"https://api.polygon.io/v2/aggs/ticker/{ticker_sym}/range/5/minute/{from_1d}/{today_str}",
-                        params={"adjusted": "true", "sort": "asc", "limit": 5000},
-                    )
-                    rows = aggs.get("results") or []
-                    if rows:
-                        last_ts = rows[-1].get("t")
-                        if last_ts:
-                            last_date = datetime.utcfromtimestamp(last_ts / 1000).date()
-                            rows = [r for r in rows if datetime.utcfromtimestamp(r.get("t", 0) / 1000).date() == last_date]
-            
-                    # Filter for market hours: 9:30 AM - 4:00 PM EST
-                    # Polygon data is in UTC, so EST market hours (9:30-16:00) are UTC (14:30-21:00) during daylight saving
-                    # and UTC (14:30-21:00) during standard time
-                    filtered_rows = []
-                    for r in rows:
-                        tms = r.get("t")
-                        if isinstance(tms, (int, float)):
-                            dt = datetime.utcfromtimestamp(tms / 1000)
-                            # Convert UTC to EST (UTC-5) or EDT (UTC-4)
-                            # Simple approach: subtract 4 or 5 hours based on DST
-                            # For now, using fixed UTC-4 for EDT (most of year)
-                            hour = dt.hour
-                            minute = dt.minute
-                            
-                            # Market hours in UTC during EDT: 13:30 (9:30 AM EDT) to 20:00 (4:00 PM EDT)
-                            # Market hours in UTC during EST: 14:30 (9:30 AM EST) to 21:00 (4:00 PM EST)
-                            # Using EDT times (most common)
-                            market_start_minutes = 13 * 60 + 30  # 13:30 UTC (9:30 AM EDT)
-                            market_end_minutes = 20 * 60  # 20:00 UTC (4:00 PM EDT)
-                            current_minutes = hour * 60 + minute
-                            
-                            if market_start_minutes <= current_minutes <= market_end_minutes:
-                                filtered_rows.append(r)
-                    
-                    series = []
-                    for r in filtered_rows:
-                        tms = r.get("t")
-                        cpx = r.get("c")
-                        if isinstance(tms, (int, float)) and isinstance(cpx, (int, float)):
-                            series.append({"t": datetime.utcfromtimestamp(tms / 1000).isoformat(), "c": cpx})
-                    return series
-                except Exception as e:
-                    print(f"[GET /api/chart/timeframe] 1D fetch failed for {ticker_sym}: {e}")
-                    return []
-            elif tf_key == '5D':
-                try:
-                    from_5d = (today - timedelta(days=7)).isoformat()
-                    aggs = _get(
-                        f"https://api.polygon.io/v2/aggs/ticker/{ticker_sym}/range/1/hour/{from_5d}/{today_str}",
-                        params={"adjusted": "true", "sort": "asc", "limit": 5000},
-                    )
-                    rows = aggs.get("results") or []
-                    series = []
-                    for r in rows:
-                        tms = r.get("t"); cpx = r.get("c")
-                        if isinstance(tms, (int, float)) and isinstance(cpx, (int, float)):
-                            series.append({"t": datetime.utcfromtimestamp(tms / 1000).isoformat(), "c": cpx})
-                    return series
-                except Exception as e:
-                    print(f"[GET /api/chart/timeframe] 5D fetch failed for {ticker_sym}: {e}")
-                    return []
-            elif tf_key in {'1M', '6M', 'YTD', '1Y', 'ALL'}:
-                try:
-                    if tf_key == '1M':
-                        from_d = (today - timedelta(days=30)).isoformat()
-                    elif tf_key == '6M':
-                        from_d = (today - timedelta(days=180)).isoformat()
-                    elif tf_key == '1Y':
-                        from_d = (today - timedelta(days=365)).isoformat()
-                    elif tf_key == 'ALL':
-                        from_d = (today - timedelta(days=3650)).isoformat()  # ~10 years
-                    else:  # YTD
-                        from_d = f"{today.year}-01-01"
-                    aggs = _get(
-                        f"https://api.polygon.io/v2/aggs/ticker/{ticker_sym}/range/1/day/{from_d}/{today_str}",
-                        params={"adjusted": "true", "sort": "asc", "limit": 50000},
-                    )
-                    rows = aggs.get("results") or []
-                    series = []
-                    for r in rows:
-                        tms = r.get("t"); cpx = r.get("c")
-                        if isinstance(tms, (int, float)) and isinstance(cpx, (int, float)):
-                            series.append({"t": datetime.utcfromtimestamp(tms / 1000).date().isoformat(), "c": cpx})
-                    return series
-                except Exception as e:
-                    print(f"[GET /api/chart/timeframe] {tf_key} fetch failed for {ticker_sym}: {e}")
-                    return []
-            else:
-                return []
+            try:
+                if tf_key in {'1D', '5D'}:
+                    rows = []
+                    for r in _bars(ticker_sym, "intraday"):
+                        local = datetime.fromtimestamp(r["t"] / 1000, tz=timezone.utc).astimezone(ny)
+                        if (9, 30) <= (local.hour, local.minute) <= (16, 0):  # regular session, DST-aware
+                            rows.append((local, r["c"]))
+                    if not rows:
+                        return []
+                    if tf_key == '1D':
+                        last_day = rows[-1][0].date()
+                        return [{"t": d.astimezone(timezone.utc).replace(tzinfo=None).isoformat(), "c": c}
+                                for d, c in rows if d.date() == last_day]
+                    days = sorted({d.date() for d, _ in rows})[-5:]
+                    hourly = {}
+                    for d, c in rows:  # last close of each hour
+                        if d.date() in days:
+                            hourly[d.replace(minute=0)] = c
+                    return [{"t": d.astimezone(timezone.utc).replace(tzinfo=None).isoformat(), "c": c}
+                            for d, c in sorted(hourly.items())]
+                if tf_key in {'1M', '6M', 'YTD', '1Y', 'ALL'}:
+                    start = {'1M': today - timedelta(days=30), '6M': today - timedelta(days=180),
+                             '1Y': today - timedelta(days=365), 'YTD': date(today.year, 1, 1),
+                             'ALL': date(1970, 1, 1)}[tf_key]
+                    out = []
+                    for r in _bars(ticker_sym, "daily"):
+                        d = datetime.fromtimestamp(r["t"] / 1000, tz=timezone.utc).date()
+                        if d >= start:
+                            out.append({"t": d.isoformat(), "c": r["c"]})
+                    return out
+            except Exception as e:
+                print(f"[GET /api/chart/timeframe] {tf_key} fetch failed for {ticker_sym}: {e}")
+            return []
 
         # Build response for main symbol
         main_series = _series_for_tf(sym, tf)

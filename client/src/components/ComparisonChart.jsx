@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 const TF_ORDER = ['1D', '5D', '1M', '6M', 'YTD', '1Y', 'ALL'];
 const HEAVY_TFS = new Set(['6M', 'YTD', '1Y', 'ALL']);
@@ -40,7 +40,6 @@ export default function ComparisonChart({ ticker, symbol, token, benchmarks = []
   console.log('isMobile', isMobile);
   const [tf, setTf] = useState('5D');
   const [visibleBenches, setVisibleBenches] = useState({ sp500: true, nasdaq: true, dow: true });
-  const queryClient = useQueryClient();
   const VITE_APP_API_URL = import.meta.env.VITE_APP_API_URL;
   // Responsive sizing based on container
   const containerRef = useRef(null);
@@ -123,28 +122,6 @@ export default function ComparisonChart({ ticker, symbol, token, benchmarks = []
     const json = await res.json();
     return { series: json.series || [], benchmarks: json.benchmarks || [] };
   };
-
-  // Prefetch light timeframes on mount
-  useEffect(() => {
-    if (!symbol || !token) return;
-    
-    // Prefetch light timeframes
-    queryClient.prefetchQuery({
-      queryKey: ['chart-timeframe', symbol, '1D', buildBenchmarksParam()],
-      queryFn: () => fetchTimeframe('1D'),
-      staleTime: 5 * 60 * 1000, // 5 minutes
-    });
-    queryClient.prefetchQuery({
-      queryKey: ['chart-timeframe', symbol, '5D', buildBenchmarksParam()],
-      queryFn: () => fetchTimeframe('5D'),
-      staleTime: 5 * 60 * 1000,
-    });
-    queryClient.prefetchQuery({
-      queryKey: ['chart-timeframe', symbol, '1M', buildBenchmarksParam()],
-      queryFn: () => fetchTimeframe('1M'),
-      staleTime: 5 * 60 * 1000,
-    });
-  }, [symbol, token, buildBenchmarksParam, queryClient]);
 
   // Use TanStack Query for current timeframe
   const { data: tfData, isLoading, error } = useQuery({
