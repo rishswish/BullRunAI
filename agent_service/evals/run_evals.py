@@ -105,10 +105,25 @@ def judge_model_name() -> str:
     return os.environ.get("JUDGE_MODEL") or get_settings().llm_model
 
 
+def _evidence(m: ToolMessage) -> str:
+    """What the judge sees from one tool result. Filing searches are flattened to
+    'S7: text' lines so every passage fits; a plain character cut used to drop the
+    last passages, and the judge then marked citations to them as invented."""
+    raw = _text_of(m.content)
+    if m.name == "search_filings":
+        try:
+            data = json.loads(raw)
+            rows = [f"{r['source_id']}: {r.get('text', '')}" for r in data.get("results", [])]
+            return f"[{m.name}]\n" + "\n".join(rows or [raw[:2000]])
+        except (ValueError, TypeError, KeyError):
+            pass
+    return f"[{m.name}] {raw[:8000]}"
+
+
 async def judge(question: str, evidence: str, answer: str) -> dict:
     model = get_chat_model(model=judge_model_name(), temperature=0)
     msg = await model.ainvoke([SystemMessage("You are a strict, fair evaluator."),
-                               HumanMessage(JUDGE_PROMPT.format(question=question, evidence=evidence[:40000],
+                               HumanMessage(JUDGE_PROMPT.format(question=question, evidence=evidence[:60000],
                                                                 answer=answer))])
     try:
         return parse_json_loose(_text_of(msg.content))
@@ -126,7 +141,7 @@ async def run_agent_case(graph, case: dict, use_judge: bool, has_index: bool) ->
 
     msgs = out["messages"]
     called = [tc["name"] for m in msgs if isinstance(m, AIMessage) for tc in (m.tool_calls or [])]
-    evidence = "\n".join(f"[{m.name}] {_text_of(m.content)[:8000]}" for m in msgs if isinstance(m, ToolMessage))
+    evidence = "\n".join(_evidence(m) for m in msgs if isinstance(m, ToolMessage))
     answer = _text_of(msgs[-1].content) if isinstance(msgs[-1], AIMessage) else ""
     tokens = sum((m.usage_metadata or {}).get("total_tokens", 0) for m in msgs if isinstance(m, AIMessage))
 
