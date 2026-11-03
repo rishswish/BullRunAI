@@ -477,7 +477,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
         <div ref={endRef} />
       </div>
       <p className="px-3 pb-1.5 text-[10px] text-gray-500 text-center">
-        Spade is AI and can make mistakes. Check important info. Not financial advice.
+        Spade is AI and can make mistakes. For research only, not financial advice.
       </p>
       <div className="p-3 border-t border-gray-200">
         <div className="flex gap-1.5">
