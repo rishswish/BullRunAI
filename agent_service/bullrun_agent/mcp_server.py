@@ -71,19 +71,23 @@ mcp = FastMCP(
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
-@mcp.tool()
+# Read-only tools tell MCP apps they change nothing, so apps like Claude can skip asking.
+READ_ONLY = ToolAnnotations(readOnlyHint=True)
+
+
+@mcp.tool(annotations=READ_ONLY)
 def get_quote(ticker: str) -> dict:
     """Latest price, daily change %, day range and volume for a stock/ETF ticker (e.g. NVDA)."""
     return ds.get_quote(ticker)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def get_news(ticker: str, limit: int = 5) -> dict:
     """Recent news for a ticker: title, publisher, date, description and per-article sentiment."""
     return ds.get_news(ticker, limit)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def search_filings(query: str, ticker: str | None = None, form: str | None = None) -> dict:
     """Hybrid (BM25 + embedding) search over each company's latest SEC 10-K and 10-Q and its 8-Ks
     from the last ~4 months (earnings releases, deals, executive changes). Any US-listed ticker works
@@ -92,7 +96,7 @@ def search_filings(query: str, ticker: str | None = None, form: str | None = Non
     return _search_filings(query, ticker=ticker, form=form)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def compare_tickers(tickers: list[str]) -> dict:
     """Side-by-side quote comparison for 2-6 tickers, sorted by daily % change."""
     rows = [ds.get_quote(t) for t in tickers[:6]]
@@ -113,13 +117,13 @@ def _user_email() -> str:
     return os.environ.get("MCP_USER_EMAIL", "demo@bullrun.ai")
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(annotations=READ_ONLY)
 def get_portfolio() -> dict:
     """The signed-in user's BullRun holdings (manual and linked accounts) with weights, P/L and cash."""
     return ds.get_portfolio(_user_email())
 
 
-@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+@mcp.tool(annotations=READ_ONLY)
 def get_watchlist() -> dict:
     """Tickers on the signed-in user's BullRun watchlist."""
     return {"watchlist": ds.get_user_store().get_user(_user_email()).get("watchlist", [])}
