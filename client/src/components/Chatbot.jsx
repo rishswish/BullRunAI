@@ -452,7 +452,7 @@ function Chatbot({ isOpen, setIsOpen, user }) {
             <p className="text-[10px] text-gray-400">{ago(th.updated_at)}</p>
           </button>
           <button onClick={() => deleteThread(th.id)} title="Delete chat" aria-label="Delete chat"
-            className="p-1 text-gray-400 hover:text-red-500 cursor-pointer">
+            className="p-1 text-red-500 hover:text-red-700 cursor-pointer">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
