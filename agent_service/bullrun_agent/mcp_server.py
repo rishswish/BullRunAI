@@ -20,9 +20,11 @@ Run
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 
+from langsmith import traceable
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.fastmcp import FastMCP
@@ -71,23 +73,51 @@ mcp = FastMCP(
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
+# Tool calls from outside apps (Claude, Cursor) go to LangSmith, in their own project. Spade's own
+# calls (service token, client "br-agent") are skipped: its graph already traces them.
+TRACE_PROJECT = os.environ.get("MCP_LANGSMITH_PROJECT", "bullrun-mcp")
+
+
+def _caller() -> tuple[str | None, str | None]:
+    tok = get_access_token()
+    return (tok.client_id, tok.subject or None) if tok is not None else ("local", None)
+
+
+def traced(fn):
+    """Trace one MCP tool call: inputs, output, time, and which app and user made it."""
+    run = traceable(run_type="tool", name=fn.__name__)(fn)
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        client, user = _caller()
+        if client == "br-agent":
+            return fn(*args, **kwargs)
+        extra = {"project_name": TRACE_PROJECT, "tags": ["mcp", fn.__name__],
+                 "metadata": {"mcp_client": client, "user_email": user}}
+        return run(*args, **kwargs, langsmith_extra=extra)
+    return wrapper
+
+
 # Read-only tools tell MCP apps they change nothing, so apps like Claude can skip asking.
 READ_ONLY = ToolAnnotations(readOnlyHint=True)
 
 
 @mcp.tool(annotations=READ_ONLY)
+@traced
 def get_quote(ticker: str) -> dict:
     """Latest price, daily change %, day range and volume for a stock/ETF ticker (e.g. NVDA)."""
     return ds.get_quote(ticker)
 
 
 @mcp.tool(annotations=READ_ONLY)
+@traced
 def get_news(ticker: str, limit: int = 5) -> dict:
     """Recent news for a ticker: title, publisher, date, description and per-article sentiment."""
     return ds.get_news(ticker, limit)
 
 
 @mcp.tool(annotations=READ_ONLY)
+@traced
 def search_filings(query: str, ticker: str | None = None, form: str | None = None) -> dict:
     """Hybrid (BM25 + embedding) search over each company's latest SEC 10-K and 10-Q and its 8-Ks
     from the last ~4 months (earnings releases, deals, executive changes). Any US-listed ticker works
@@ -97,6 +127,7 @@ def search_filings(query: str, ticker: str | None = None, form: str | None = Non
 
 
 @mcp.tool(annotations=READ_ONLY)
+@traced
 def compare_tickers(tickers: list[str]) -> dict:
     """Side-by-side quote comparison for 2-6 tickers, sorted by daily % change."""
     rows = [ds.get_quote(t) for t in tickers[:6]]
@@ -118,18 +149,21 @@ def _user_email() -> str:
 
 
 @mcp.tool(annotations=READ_ONLY)
+@traced
 def get_portfolio() -> dict:
     """The signed-in user's BullRun holdings (manual and linked accounts) with weights, P/L and cash."""
     return ds.get_portfolio(_user_email())
 
 
 @mcp.tool(annotations=READ_ONLY)
+@traced
 def get_watchlist() -> dict:
     """Tickers on the signed-in user's BullRun watchlist."""
     return {"watchlist": ds.get_user_store().get_user(_user_email()).get("watchlist", [])}
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True))
+@traced
 def update_watchlist(add: list[str] | None = None, remove: list[str] | None = None) -> dict:
     """Add or remove tickers on the signed-in user's BullRun watchlist (shows up on their dashboard).
     Confirm the change with the user before calling."""
@@ -142,6 +176,7 @@ def update_watchlist(add: list[str] | None = None, remove: list[str] | None = No
 
 
 @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False))
+@traced
 def update_holdings(trades: list[dict]) -> dict:
     """Record trades the user made in their BullRun manual holdings. trades is a list of
     {"symbol": "NVDA", "shares": 10, "price": 180.5}: shares negative for a sale; price per share

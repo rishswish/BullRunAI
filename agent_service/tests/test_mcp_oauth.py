@@ -148,3 +148,34 @@ def test_client_id_metadata_documents_are_accepted(monkeypatch):
         return Resp({"client_id": "https://someone-else", "redirect_uris": [CALLBACK]})
     monkeypatch.setattr(Http, "get", mismatched)
     assert asyncio.run(provider.get_client("https://claude.ai/other")) is None
+
+
+def test_mcp_tool_calls_traced_except_spade(monkeypatch):
+    """Claude's tool calls are traced with app + user; Spade's service-token calls are skipped."""
+    from types import SimpleNamespace
+
+    from bullrun_agent import mcp_server
+
+    seen = []
+
+    def fake_traceable(**_):
+        def deco(fn):
+            def run(*a, langsmith_extra=None, **kw):
+                seen.append(langsmith_extra)
+                return fn(*a, **kw)
+            return run
+        return deco
+
+    monkeypatch.setattr(mcp_server, "traceable", fake_traceable)
+    tool = mcp_server.traced(lambda ticker: {"ticker": ticker})
+
+    monkeypatch.setattr(mcp_server, "get_access_token",
+                        lambda: SimpleNamespace(client_id="claude-123", subject="me@x.com"))
+    assert tool("NVDA") == {"ticker": "NVDA"}
+    assert seen[-1]["metadata"] == {"mcp_client": "claude-123", "user_email": "me@x.com"}
+    assert seen[-1]["project_name"] == mcp_server.TRACE_PROJECT
+
+    monkeypatch.setattr(mcp_server, "get_access_token",
+                        lambda: SimpleNamespace(client_id="br-agent", subject=""))
+    tool("AMD")
+    assert len(seen) == 1  # Spade's call not traced again
