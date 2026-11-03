@@ -244,3 +244,26 @@ def test_two_filing_searches_get_distinct_source_ids():
     assert ids == [f"S{k}" for k in range(1, 10)]  # last turn's S1-S6 don't count
     later = number_sources([*earlier, *first], [search(3, 2)])  # a third search, next step
     assert [r["source_id"] for r in json.loads(later[0].content)["results"]] == ["S10", "S11"]
+
+
+def test_filing_searches_capped_per_company():
+    """A third NVDA search in one question is skipped with a note; other companies still run."""
+    from langchain_core.messages import HumanMessage
+
+    from bullrun_agent.graph.builder import cap_filing_searches
+
+    def call(i, ticker):
+        return {"name": "search_filings", "args": {"query": "q", "ticker": ticker}, "id": f"c{i}"}
+
+    def result(i):
+        return ToolMessage('{"results": []}', name="search_filings", tool_call_id=f"c{i}")
+
+    old = [HumanMessage("old"), AIMessage("", tool_calls=[call(9, "NVDA")]), result(9)]
+    step1 = AIMessage("", tool_calls=[call(1, "NVDA"), call(2, "nvda")])
+    step2 = AIMessage("", tool_calls=[call(3, "NVDA"), call(4, "AMD"), {"name": "get_quote", "args": {}, "id": "q"}])
+    history = [*old, HumanMessage("NVDA latest results?"), step1, result(1), result(2), step2]
+
+    run, skipped = cap_filing_searches(history, step2)
+    assert [c["id"] for c in run] == ["c4", "q"]  # last turn's NVDA search doesn't count
+    assert [m.tool_call_id for m in skipped] == ["c3"]
+    assert json.loads(skipped[0].content)["status"] == "skipped"

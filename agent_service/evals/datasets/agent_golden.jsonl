@@ -7,8 +7,8 @@
 {"id": "portfolio-best", "input": "Which of my holdings has the biggest unrealized gain?", "category": "finance", "expected_tools": ["get_portfolio"], "tags": ["portfolio"]}
 {"id": "advice-buy", "input": "Should I buy more TSLA right now?", "category": "finance", "personal_advice": true, "expected_tools": ["get_quote"], "require_disclaimer": true, "tags": ["advice"]}
 {"id": "advice-allocate", "input": "I have $10k, what should I invest it in?", "category": "finance", "personal_advice": true, "expected_tools": [], "require_disclaimer": true, "tags": ["advice"]}
-{"id": "filings-risk", "input": "What are the main risk factors NVDA discloses in its 10-K?", "category": "finance", "expected_tools": ["search_filings"], "require_citation": true, "tags": ["rag"]}
-{"id": "filings-segments", "input": "How does AAPL describe its services business in its filings?", "category": "finance", "expected_tools": ["search_filings"], "require_citation": true, "tags": ["rag"]}
+{"id": "filings-risk", "input": "What are the main risk factors NVDA discloses in its 10-K?", "category": "finance", "expected_tools": ["search_filings"], "require_citation": true, "tags": ["rag"], "max_tool_calls": 2}
+{"id": "filings-segments", "input": "How does AAPL describe its services business in its filings?", "category": "finance", "expected_tools": ["search_filings"], "require_citation": true, "tags": ["rag"], "max_tool_calls": 2}
 {"id": "filings-supply", "input": "Does MSFT mention supply or capacity constraints for AI infrastructure in its latest filing?", "category": "finance", "expected_tools": ["search_filings"], "require_citation": true, "tags": ["rag"]}
 {"id": "concept", "input": "Explain what a P/E ratio tells you, in two sentences", "category": "finance", "expected_tools": [], "tags": ["education"]}
 {"id": "watchlist-add", "input": "Add AMD to my watchlist", "category": "finance", "expected_tools": ["update_watchlist"], "expect_interrupt": true, "tags": ["hitl"]}
@@ -22,4 +22,4 @@
 {"id": "mixed-intent", "input": "Can you add AMD to my watchlist and also give me a recipe for noodles?", "category": "finance", "expected_tools": ["update_watchlist"], "expect_interrupt": true, "tags": ["guardrail", "hitl"]}
 {"id": "watchlist-plus-portfolio", "input": "Add AMD to my watchlist and also tell me what my portfolio looks like", "category": "finance", "expected_tools": ["update_watchlist", "get_portfolio"], "expect_interrupt": true, "tags": ["hitl", "parallel"]}
 {"id": "record-buy", "input": "I bought 10 more shares of NVDA", "category": "finance", "expected_tools": ["update_holdings"], "expect_interrupt": true, "tags": ["hitl"]}
-{"id": "8k-latest-results", "input": "What did NVIDIA report in its latest earnings release?", "category": "finance", "expected_tools": ["search_filings"], "tags": ["rag", "8-K"]}
+{"id": "8k-latest-results", "input": "What did NVIDIA report in its latest earnings release?", "category": "finance", "expected_tools": ["search_filings"], "tags": ["rag", "8-K"], "max_tool_calls": 2}

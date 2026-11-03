@@ -95,6 +95,42 @@ def number_sources(history: list[BaseMessage], new: list[BaseMessage]) -> list[B
     return out
 
 
+MAX_SEARCHES_PER_COMPANY = 2  # per question; more rarely adds anything, just tokens and wait
+
+
+def _ticker_of(call: dict) -> str:
+    return str((call.get("args") or {}).get("ticker") or "any").upper()
+
+
+def cap_filing_searches(history: list[BaseMessage], last: AIMessage) -> tuple[list[dict], list[ToolMessage]]:
+    """Split the model's tool calls into ones to run and filing searches over the per-company cap.
+    The extra searches get a short note back instead of running."""
+    done: dict[str, int] = {}
+    calls_by_id = {}
+    for m in reversed(history[:-1]):  # this turn only
+        if isinstance(m, HumanMessage):
+            break
+        if isinstance(m, AIMessage):
+            calls_by_id.update({c["id"]: c for c in m.tool_calls})
+    for m in history:
+        if isinstance(m, ToolMessage) and m.name == "search_filings" and m.tool_call_id in calls_by_id:
+            t = _ticker_of(calls_by_id[m.tool_call_id])
+            done[t] = done.get(t, 0) + 1
+    run, skipped = [], []
+    for c in last.tool_calls:
+        if c["name"] == "search_filings":
+            t = _ticker_of(c)
+            if done.get(t, 0) >= MAX_SEARCHES_PER_COMPANY:
+                note = {"status": "skipped",
+                        "note": f"Already searched {t} filings {MAX_SEARCHES_PER_COMPANY} times for this "
+                                "question. Answer now from the passages you have."}
+                skipped.append(ToolMessage(json.dumps(note), tool_call_id=c["id"], name=c["name"]))
+                continue
+            done[t] = done.get(t, 0) + 1
+        run.append(c)
+    return run, skipped
+
+
 def build_graph(tools: list[BaseTool], checkpointer=None, settings: Settings | None = None,
                 chat_model=None, router_model=None):
     s = settings or get_settings()
@@ -139,8 +175,14 @@ def build_graph(tools: list[BaseTool], checkpointer=None, settings: Settings | N
     tool_node = ToolNode(tools, handle_tool_errors=True)
 
     async def run_tools(state: AgentState, config: RunnableConfig) -> dict:
-        out = await tool_node.ainvoke(state, config)
-        return {"messages": number_sources(state["messages"], out["messages"])}
+        msgs = state["messages"]
+        run, skipped = cap_filing_searches(msgs, msgs[-1])
+        ran = []
+        if run:
+            # ToolNode runs the last message's calls, so hand it a copy holding only the allowed ones
+            allowed = msgs[-1].model_copy(update={"tool_calls": run})
+            ran = (await tool_node.ainvoke({**state, "messages": [*msgs[:-1], allowed]}, config))["messages"]
+        return {"messages": [*number_sources(msgs, ran), *skipped]}
 
     def respond_refusal(state: AgentState) -> dict:
         text = prompts.REFUSAL_UNSAFE if state["category"] == "unsafe" else prompts.REFUSAL_OFF_TOPIC

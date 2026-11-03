@@ -13,6 +13,7 @@ Agent metrics (per case, then aggregated)
   disclaimer_ok       advice-seeking answers carry the compliance disclaimer
   citation_ok         filing answers cite [S#] sources (skipped when no index is built)
   interrupt_ok        write actions pause for human approval
+  efficient_ok        no more tool calls than the case's max_tool_calls (reported, not gated)
   groundedness/helpfulness   LLM-as-judge 1-5 against the actual tool outputs
   latency p50/p95, tokens per answer
 
@@ -158,6 +159,8 @@ async def run_agent_case(graph, case: dict, use_judge: bool, has_index: bool) ->
         r["tool_precision"] = len(set(called) & exp) / len(set(called))
     if case.get("min_tool_calls"):
         r["parallel_ok"] = len(called) >= case["min_tool_calls"]
+    if case.get("max_tool_calls"):  # catches the agent searching over and over
+        r["efficient_ok"] = len(called) <= case["max_tool_calls"]
     if case.get("require_disclaimer"):
         r["disclaimer_ok"] = DISCLAIMER.strip()[:40] in answer
     if case.get("expect_interrupt"):
@@ -219,6 +222,7 @@ def aggregate(all_results: list[dict]) -> dict:
         "tool_recall": mean("tool_recall"),
         "tool_precision": mean("tool_precision"),
         "parallel_ok": mean("parallel_ok"),
+        "efficient_ok": mean("efficient_ok"),
         "disclaimer_ok": mean("disclaimer_ok"),
         "interrupt_ok": mean("interrupt_ok"),
         "citation_ok": mean("citation_ok"),
