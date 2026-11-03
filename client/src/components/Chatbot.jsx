@@ -477,6 +477,9 @@ function Chatbot({ isOpen, setIsOpen, user }) {
         <div ref={endRef} />
       </div>
       <div className="p-3 border-t border-gray-200">
+        <p className="text-[10px] text-gray-500 mb-1.5 text-center">
+          Spade is AI and can make mistakes. Check important info. Not financial advice.
+        </p>
         <div className="flex gap-1.5">
           <input
             type="text"
@@ -492,9 +495,6 @@ function Chatbot({ isOpen, setIsOpen, user }) {
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
         </div>
-        <p className="text-[10px] text-gray-500 mt-1.5 text-center">
-          Spade is AI and can make mistakes. Check important info. Not financial advice.
-        </p>
       </div>
     </>
   );
