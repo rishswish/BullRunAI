@@ -191,9 +191,10 @@ async def test_chats_get_short_unique_titles(monkeypatch):
     assert {r["title"] for r in store.list("u@x.com")} == {"Add AMD to my watchlist", "Add AMD to my watchlist (2)"}
 
     class Namer:
-        async def ainvoke(self, prompt):
+        async def ainvoke(self, prompt, config=None):
             assert "Add AMD to my watchlist" in prompt  # sees the other chats' titles
             return AIMessage('"Adding AMD to watchlist."')
+            assert config["run_name"] == "chat-title" and config["metadata"]["thread_id"] == "t2"
 
     monkeypatch.setattr(api, "get_settings", lambda: get_settings().model_copy(update={"llm_provider": "gemini"}))
     monkeypatch.setattr(llm, "get_router_model", lambda *a: Namer())

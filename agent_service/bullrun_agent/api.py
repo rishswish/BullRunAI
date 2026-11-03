@@ -135,12 +135,12 @@ def _user_hash(email: str) -> str:
 _recent_runs: dict[str, deque] = defaultdict(lambda: deque(maxlen=200))  # user -> run ids they own
 
 
-def _config(user: User, thread_id: str, run_id: str | None = None) -> dict:
+def _config(user: User, thread_id: str, run_id: str | None = None, run_name: str = "spade-chat") -> dict:
     # Threads are namespaced by user so one user can never load another's memory.
     cfg = {"configurable": {"thread_id": f"{user.email}:{thread_id}", "user_email": user.email,
                             "user_name": user.name},
            "metadata": {"user_id": _user_hash(user.email), "thread_id": thread_id},
-           "tags": ["bullrun-chat"], "run_name": "spade-chat"}
+           "tags": ["bullrun-chat"], "run_name": run_name}
     if run_id:
         cfg["run_id"] = uuid.UUID(run_id)  # becomes the LangSmith trace id
         _recent_runs[user.email].append(run_id)
@@ -220,8 +220,11 @@ async def _name_thread(email: str, thread_id: str, question: str, answer: str) -
         if not saved or saved.get("titled") or get_settings().llm_provider == "fake":
             return None
         others = [r["title"] for r in await asyncio.to_thread(store.list, email) if r["id"] != thread_id]
+        # named and filed under the same chat, so in LangSmith it sits in that chat's thread
+        trace = {"run_name": "chat-title", "tags": ["background"],
+                 "metadata": {"thread_id": thread_id, "user_id": _user_hash(email)}}
         msg = await get_router_model().ainvoke(TITLE_PROMPT.format(
-            taken="; ".join(others[:20]) or "(none)", question=question[:500], answer=answer[:1200]))
+            taken="; ".join(others[:20]) or "(none)", question=question[:500], answer=answer[:1200]), trace)
         title = _text_of(msg.content).strip().strip('"\'.').splitlines()[0][:60]
         if not title:
             return None
@@ -314,7 +317,7 @@ async def chat(body: ChatIn, request: Request, user: User = Depends(rate_limited
     graph = request.app.state.graph
     if (await graph.aget_state(_config(user, thread_id))).next:
         # a pending approval exists: a new message implicitly declines it
-        await graph.ainvoke(Command(resume={"approved": False}), _config(user, thread_id))
+        await graph.ainvoke(Command(resume={"approved": False}), _config(user, thread_id, run_name="spade-decline"))
     run_id = str(uuid.uuid4())
     history = []
     if body.thread_id and not (await graph.aget_state(_config(user, thread_id))).values.get("messages"):
@@ -333,7 +336,8 @@ async def resume(body: ResumeIn, request: Request, user: User = Depends(rate_lim
     if not (await graph.aget_state(_config(user, body.thread_id))).next:
         raise HTTPException(409, "Nothing is waiting for approval on this thread")
     run_id = str(uuid.uuid4())
-    cfg = _config(user, body.thread_id, run_id)
+    cfg = _config(user, body.thread_id, run_id,
+                  run_name="spade-approve" if body.approved else "spade-decline")
     return EventSourceResponse(_stream(graph, Command(resume={"approved": body.approved}), cfg, body.thread_id),
                                headers={"X-Run-ID": run_id})
 

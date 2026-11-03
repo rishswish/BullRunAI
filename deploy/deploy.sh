@@ -156,6 +156,8 @@ MCP_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub
 SERVER_SECRETS=$(secrets_flag GOOGLE_API_KEY=google-api-key FINNHUB_API_KEY=finnhub-api-key POLYGON_API_KEY=polygon-api-key SESSION_SECRET=session-secret \
   SNAPTRADE_CONSUMER_KEY=snaptrade-consumer-key SNAPTRADE_CLIENT_ID=snaptrade-client-id)
 TRACING=false; [[ -n "${HAVE[langsmith-api-key]:-}" ]] && TRACING=true
+# live traffic gets its own LangSmith project; local runs and evals stay in their own
+TRACE_PROJECT="${TRACE_PROJECT:-bullrun-ai-demo}"
 # Backup model: FALLBACK_PROVIDER/FALLBACK_MODEL if given, else OpenAI when its key is stored.
 FALLBACK=""
 if [[ -n "${FALLBACK_PROVIDER:-}" ]]; then
@@ -251,14 +253,14 @@ bold "7/9  Deploying services"
 info "br-mcp ..."
 gcloud run deploy br-mcp --image="$IMG/br-agent:latest" "${COMMON[@]}" \
   --command=python --args="-m,bullrun_agent.mcp_server,--http" \
-  --set-env-vars="^;^ALLOW_DEMO_DATA=false;EMBEDDING_PROVIDER=gemini;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;MCP_PUBLIC_URL=$MCP_URL;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;SEC_USER_AGENT=BullRunAI $ACCOUNT" \
+  --set-env-vars="^;^ALLOW_DEMO_DATA=false;EMBEDDING_PROVIDER=gemini;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;MCP_PUBLIC_URL=$MCP_URL;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;LANGSMITH_TRACING=$TRACING;LANGSMITH_PROJECT=$TRACE_PROJECT;SEC_USER_AGENT=BullRunAI $ACCOUNT" \
   --set-secrets="$MCP_SECRETS" --memory=1Gi --min-instances=0 --max-instances=2 \
   --allow-unauthenticated >/dev/null
 
 info "br-agent ..."
 # max-instances=1 because chat memory is in-process; set CHECKPOINT_DB_URL (Postgres) to scale out.
 gcloud run deploy br-agent --image="$IMG/br-agent:latest" "${COMMON[@]}" \
-  --set-env-vars="^;^ALLOW_DEMO_DATA=false;LLM_PROVIDER=gemini;LLM_MODEL=$LLM_MODEL;ROUTER_MODEL=$ROUTER_MODEL;EMBEDDING_PROVIDER=gemini;TOOLS_MODE=mcp;MCP_SERVER_URL=$MCP_URL/mcp;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;CORS_ORIGINS=$CLIENT_URL,http://localhost:5173;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;LANGSMITH_TRACING=$TRACING;LANGSMITH_PROJECT=bullrun-agent;SEC_USER_AGENT=BullRunAI $ACCOUNT$FALLBACK" \
+  --set-env-vars="^;^ALLOW_DEMO_DATA=false;LLM_PROVIDER=gemini;LLM_MODEL=$LLM_MODEL;ROUTER_MODEL=$ROUTER_MODEL;EMBEDDING_PROVIDER=gemini;TOOLS_MODE=mcp;MCP_SERVER_URL=$MCP_URL/mcp;PROJECT_ID=$PROJECT_ID;FIRESTORE_DATABASE=$FIRESTORE_DB;GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID;CORS_ORIGINS=$CLIENT_URL,http://localhost:5173;INDEX_GCS_URI=$INDEX_URI;INDEX_DIR=/tmp/filings_index;LANGSMITH_TRACING=$TRACING;LANGSMITH_PROJECT=$TRACE_PROJECT;SEC_USER_AGENT=BullRunAI $ACCOUNT$FALLBACK" \
   --set-secrets="$AGENT_SECRETS" --memory=1Gi --cpu=1 --timeout=300 --concurrency=40 \
   --min-instances="$MIN_INSTANCES" --max-instances=1 --cpu-boost --allow-unauthenticated >/dev/null
 

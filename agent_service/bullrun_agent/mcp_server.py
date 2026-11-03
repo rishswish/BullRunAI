@@ -73,9 +73,9 @@ mcp = FastMCP(
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
-# Tool calls from outside apps (Claude, Cursor) go to LangSmith, in their own project. Spade's own
-# calls (service token, client "br-agent") are skipped: its graph already traces them.
-TRACE_PROJECT = os.environ.get("MCP_LANGSMITH_PROJECT", "bullrun-mcp")
+# Tool calls from outside apps (Claude, Cursor) go to LangSmith next to Spade's chats, named
+# "mcp-<tool>". Spade's own calls (service token, client "br-agent") are skipped: its graph traces them.
+TRACE_PROJECT = os.environ.get("LANGSMITH_PROJECT", "bullrun-ai-demo")
 
 
 def _caller() -> tuple[str | None, str | None]:
@@ -85,7 +85,7 @@ def _caller() -> tuple[str | None, str | None]:
 
 def traced(fn):
     """Trace one MCP tool call: inputs, output, time, and which app and user made it."""
-    run = traceable(run_type="tool", name=fn.__name__)(fn)
+    run = traceable(run_type="tool", name=f"mcp-{fn.__name__}")(fn)
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
