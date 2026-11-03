@@ -492,7 +492,9 @@ function Chatbot({ isOpen, setIsOpen, user }) {
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </button>
         </div>
-        <p className="text-[9px] text-gray-400 mt-1">Educational research, not financial advice.</p>
+        <p className="text-[10px] text-gray-500 mt-1.5 text-center">
+          Spade is AI and can make mistakes. Check important info. Not financial advice.
+        </p>
       </div>
     </>
   );
